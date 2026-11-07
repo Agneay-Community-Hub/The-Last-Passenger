@@ -121,6 +121,29 @@ namespace TLP
             return clip;
         }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        /// <summary>Dev aid: writes every synthesised clip as a 16-bit WAV (used to score the trailer).</summary>
+        public void DumpClips(string dir)
+        {
+            System.IO.Directory.CreateDirectory(dir);
+            foreach (var f in GetType().GetFields())
+            {
+                if (f.FieldType != typeof(AudioClip) || !(f.GetValue(this) is AudioClip c)) continue;
+                var d = new float[c.samples * c.channels];
+                c.GetData(d, 0);
+                using (var w = new System.IO.BinaryWriter(System.IO.File.Create(System.IO.Path.Combine(dir, f.Name + ".wav"))))
+                {
+                    int bytes = d.Length * 2;
+                    w.Write(System.Text.Encoding.ASCII.GetBytes("RIFF")); w.Write(36 + bytes);
+                    w.Write(System.Text.Encoding.ASCII.GetBytes("WAVEfmt ")); w.Write(16); w.Write((short)1); w.Write((short)c.channels);
+                    w.Write(c.frequency); w.Write(c.frequency * c.channels * 2); w.Write((short)(c.channels * 2)); w.Write((short)16);
+                    w.Write(System.Text.Encoding.ASCII.GetBytes("data")); w.Write(bytes);
+                    foreach (var v in d) w.Write((short)Mathf.Clamp(v * 32767f, -32768, 32767));
+                }
+            }
+        }
+#endif
+
         static float Sin(float hz, float t, float ph = 0) => Mathf.Sin(2f * Mathf.PI * hz * t + ph);
 
         void Generate()

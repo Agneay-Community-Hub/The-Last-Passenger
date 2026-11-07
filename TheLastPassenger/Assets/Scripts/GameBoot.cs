@@ -176,6 +176,14 @@ namespace TLP
                 if (args[i] == "-tlpshots") shots = args[i + 1];
                 if (args[i] == "-tlpchapter") int.TryParse(args[i + 1], out fromCh);
             }
+            if (System.Array.IndexOf(args, "-tlptrailer") >= 0)
+            {
+                int super = 1;
+                for (int i = 0; i < args.Length - 1; i++) if (args[i] == "-tlpsuper") int.TryParse(args[i + 1], out super);
+                story.ShowTitle(); ui.menuOpen = false; ui.gameStarted = true;
+                ui.StartCoroutine(story.Trailer(shots ?? "trailer", super));
+                return;
+            }
             if (System.Array.IndexOf(args, "-tlpportrait") >= 0) { story.ShowTitle(); ui.menuOpen = false; ui.gameStarted = true; ui.StartCoroutine(story.Portraits(shots)); return; }
             if (botEnding != null)
             {

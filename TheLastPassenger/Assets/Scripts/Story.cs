@@ -1678,6 +1678,16 @@ namespace TLP
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         public void JumpTo(int c)
         {
+            PrepData(c);
+            ui.gameStarted = true; ui.menuOpen = false;
+            if (main != null) StopCoroutine(main);
+            StopAllCoroutines();
+            main = StartCoroutine(Run(c));
+            if (bot) StartCoroutine(Bot());
+        }
+
+        void PrepData(int c)
+        {
             data = new SaveData();
             F.chapter = c;
             if (c >= 2)
@@ -1686,11 +1696,6 @@ namespace TLP
             if (c >= 3) { data.rows.Add(new ManifestRow { id = "selvam", name = "Selvam", seat = P["selvam"].seatLabel, dest = "- (no ticket)", status = 1 }); Row("meena").status = 2; }
             F.routeCard = F.wetHandle = c >= 2; F.meenaTicket = c >= 3; F.phone = F.newspaper = c >= 4;
             F.badge = F.balaTalk = c >= 5; F.logbook = F.driverTalk = c >= 6; F.finalTicket = c >= 7;
-            ui.gameStarted = true; ui.menuOpen = false;
-            if (main != null) StopCoroutine(main);
-            StopAllCoroutines();
-            main = StartCoroutine(Run(c));
-            if (bot) StartCoroutine(Bot());
         }
 #endif
 
@@ -1736,6 +1741,235 @@ namespace TLP
             yield break;
 #endif
         }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        // ================================================================== TRAILER (dev builds only)
+        // -tlptrailer -tlpshots <dir>: plays a scripted shot list at a locked 30 fps and writes every
+        // frame as a JPG plus cues.txt (frame, kind, text) that the trailer cutting script lays sound and captions on.
+
+        bool trRec; int trFrame; float trShake; StreamWriter trCues;
+
+        void Cue(string kind, string text = "") { trCues?.WriteLine(trFrame + "\t" + kind + "\t" + text); trCues?.Flush(); }
+
+        IEnumerator TrailerRecorder(string dir, int super)
+        {
+            var eof = new WaitForEndOfFrame();
+            while (true)
+            {
+                yield return eof;
+                if (!trRec) continue;
+                var tex = ScreenCapture.CaptureScreenshotAsTexture(super);
+                File.WriteAllBytes(Path.Combine(dir, "f" + trFrame.ToString("00000") + ".jpg"), tex.EncodeToJPG(93));
+                Destroy(tex);
+                trFrame++;
+            }
+        }
+
+        /// <summary>Moves the camera from (p0 looking at l0) to (p1 looking at l1) over 'dur' seconds.</summary>
+        IEnumerator TrCam(float dur, Vector3 p0, Vector3 l0, Vector3 p1, Vector3 l1, Action<float> each = null)
+        {
+            var c = pl.cam.transform;
+            for (float t = 0; t < dur; t += Time.deltaTime)
+            {
+                float k = Mathf.SmoothStep(0, 1, t / dur);
+                trShake = Mathf.MoveTowards(trShake, 0, Time.deltaTime * 1.6f);
+                var j = new Vector3(Mathf.PerlinNoise(Time.time * 37f, 1) - 0.5f, Mathf.PerlinNoise(Time.time * 37f, 9) - 0.5f, 0) * trShake * 0.09f;
+                c.position = Vector3.Lerp(p0, p1, k);
+                c.rotation = Quaternion.LookRotation(Vector3.Lerp(l0, l1, k) - c.position) * Quaternion.Euler(j.y * 40f, j.x * 40f, j.x * 25f);
+                each?.Invoke(t / dur);
+                yield return null;
+            }
+        }
+
+        IEnumerator TrStill(float dur, Vector3 p, Vector3 l, Action<float> each = null) => TrCam(dur, p, l, p, l, each);
+
+        IEnumerator TrBlack(float dur)
+        {
+            ui.fade = 1; ui.fadeTarget = 1;
+            yield return new WaitForSeconds(dur);
+        }
+
+        void TrOpen() { ui.fade = 0; ui.fadeTarget = 0; }
+
+        void TrHit(float s, string kind = "hit")
+        {
+            Cue(kind, s.ToString("0.00"));
+            ui.Flash(new Color(0.55f, 0f, 0f), 0.35f * s);
+            trShake = Mathf.Max(trShake, 0.4f + s);
+        }
+
+        public IEnumerator Trailer(string dir, int super)
+        {
+            Directory.CreateDirectory(dir);
+            foreach (var f in Directory.GetFiles(dir, "f*.jpg")) File.Delete(f);
+            trCues = new StreamWriter(Path.Combine(dir, "cues.txt"));
+            au.DumpClips(Path.Combine(dir, "sfx"));
+            settings.marker = false; settings.reduceMotion = false;
+            ui.trailer = true; ui.objective = null; ui.ShowHint(0);
+            PrepData(3);
+            SetupState(3, false);
+            ui.fade = 1; ui.fadeTarget = 1;
+            yield return new WaitForSecondsRealtime(1.5f);
+            StopAllCoroutines();                     // freeze the story; this coroutine runs on the UI object
+            ui.StartCoroutine(TrailerRecorder(dir, super));
+            Time.captureFramerate = 30;
+            ui.cinematic = true; ui.ClearLines();
+            pl.lookOverrideWeight = 1;
+            pl.cam.transform.SetParent(null, true);
+            pl.cam.fieldOfView = 58;
+            route.zone = Zone.City; route.Cruise(); route.speed = route.maxSpeed;
+            ui.dread = 0.25f;
+            yield return new WaitForSeconds(2f);     // let the city fill in
+            trRec = true;
+
+            // 1. The bus at night, from across the road
+            Cue("cut", "exterior"); Cue("music", "start");
+            yield return TrBlack(1.0f);
+            TrOpen(); ui.fade = 1; ui.fadeTarget = 0; ui.fadeSpeed = 0.8f;
+            Cue("caption", "ROUTE 117  ·  LAST SERVICE  ·  01:17 A.M.");
+            yield return TrCam(6.5f, new Vector3(5.2f, 1.1f, 13f), new Vector3(0, 1.6f, 4f), new Vector3(4.6f, 1.5f, 3f), new Vector3(0, 1.4f, -2f));
+
+            // 2. Down the aisle
+            Cue("cut", "aisle"); Cue("caption", "You are the conductor.");
+            ui.fadeSpeed = 0.6f;
+            yield return TrCam(5f, new Vector3(0f, 1.75f, 4.4f), new Vector3(0, 1.1f, -5f), new Vector3(0f, 1.62f, 2.2f), new Vector3(0, 1.0f, -5f));
+
+            // 3. The ticket machine
+            Cue("cut", "ticket"); Cue("bell");
+            Cue("caption", "Issue every ticket.");
+            ui.OpenTicket(P["kavin"], "Old Market", _ => { });
+            yield return TrStill(1.6f, new Vector3(0.2f, 1.6f, 2.0f), new Vector3(0.98f, 0.9f, -1.6f));
+            Cue("printer");
+            ui.ticketOpen = false;
+            ui.Toast("TICKET ISSUED  ·  KAVIN  ·  RIVER ROAD", 3f, true);
+            yield return TrStill(1.2f, new Vector3(0.2f, 1.6f, 2.0f), new Vector3(0.98f, 0.9f, -1.6f));
+
+            // 4. The manifest
+            Cue("cut", "manifest"); Cue("caption", "Count every passenger.");
+            ui.hasManifest = true; ui.manifestOpen = true;
+            yield return TrStill(3f, new Vector3(0f, 1.62f, 3.0f), new Vector3(0, 1.2f, -5f));
+            ui.manifestOpen = false;
+
+            // 5. They all look at you
+            Cue("cut", "stare"); Cue("caption", "The count doesn't stay right.");
+            bool looked = false;
+            yield return TrCam(3.4f, new Vector3(0f, 1.62f, 3.2f), new Vector3(0, 1.1f, -4f), new Vector3(0f, 1.6f, 2.5f), new Vector3(0, 1.05f, -4f), k =>
+            {
+                if (!looked && k > 0.35f)
+                {
+                    looked = true; Cue("whisper");
+                    foreach (var p in P.Values) if (p.gameObject.activeInHierarchy) p.LookAt(pl.cam.transform.position);
+                }
+            });
+            foreach (var p in P.Values) p.LookForward();
+
+            // 6. The mirror
+            Cue("cut", "mirror"); Cue("caption", "Hold SHIFT. The mirror sees more.");
+            ghostMeena.PlaceSeated(); ghostMeena.LookForward();
+            ui.cinematic = false; pl.forceMirror = true;
+            bool turned = false;
+            yield return TrStill(4.6f, new Vector3(0.1f, 1.62f, 1.6f), new Vector3(0.6f, 1.0f, 3.4f), k =>
+            {
+                if (!turned && k > 0.45f) { turned = true; ghostMeena.LookAt(bus.mirrorCam.transform.position); Cue("breath"); }
+            });
+            pl.forceMirror = false; ui.cinematic = true;
+            ghostMeena.Hide(); ghostMeena.LookForward();
+            TrHit(0.5f);
+            yield return TrStill(0.5f, new Vector3(0.1f, 1.62f, 1.6f), new Vector3(0.9f, 0.9f, 3.4f));
+
+            // ---- montage
+            Cue("cut", "black"); Cue("drone", "rise");
+            yield return TrBlack(0.4f);
+            Cue("card", "Don't count the people you can hear.");
+            yield return TrBlack(2.6f);
+            ui.dread = 0.5f;
+
+            // 7. Rear door
+            Cue("cut", "reardoor"); TrOpen();
+            var leaf = bus.rearDoor; var leafBase = leaf.localPosition;
+            yield return TrStill(2.2f, new Vector3(0.35f, 1.55f, -0.4f), new Vector3(-1.2f, 1.1f, -2.6f), k =>
+            {
+                bool bang = (k > 0.2f && k < 0.3f) || (k > 0.5f && k < 0.58f) || (k > 0.75f && k < 0.86f);
+                leaf.localPosition = leafBase + (bang ? new Vector3(UnityEngine.Random.Range(-0.04f, 0.04f), 0, 0) : Vector3.zero);
+                if (bang && Time.frameCount % 3 == 0) trShake = Mathf.Max(trShake, 0.5f);
+            });
+            leaf.localPosition = leafBase;
+            Cue("knock", "2.0"); // the cutting script places the bangs by this cue's frame
+
+            // 8. Phone on an empty seat
+            Cue("cut", "phone"); Cue("phone");
+            bus.ShowObj("Phone", true);
+            StartCoroutine(bus.Flicker(2, 2f));
+            yield return TrCam(2.2f, new Vector3(-0.1f, 1.25f, 0.9f), new Vector3(-0.95f, 0.54f, 0.05f), new Vector3(-0.3f, 1.1f, 0.6f), new Vector3(-0.95f, 0.54f, 0.05f));
+            bus.ShowObj("Phone", false);
+
+            // 9. Face on the window
+            Cue("cut", "window");
+            Passenger face = null;
+            yield return TrCam(2.2f, new Vector3(0.2f, 1.58f, -0.5f), new Vector3(1.4f, 1.5f, 0.0f), new Vector3(0.62f, 1.6f, -0.15f), new Vector3(1.42f, 1.62f, 0.1f), k =>
+            {
+                if (face == null && k > 0.4f)
+                {
+                    face = PersonBuilder.Copy(P["meena"], transform, "trailer_face");
+                    Destroy(face.GetComponent<Collider>()); face.interact.active = false;
+                    face.PlaceAt(new Vector3(1.42f, 0.05f, 0.1f), -90, PState.Standing);
+                    face.LookAt(pl.cam.transform.position);
+                    TrHit(0.75f);
+                }
+            });
+            if (face) Destroy(face.gameObject);
+
+            // 10. Don't turn around
+            Cue("cut", "behind"); Cue("caption", "Don't turn around.");
+            var man = silentMan;
+            B.Layer(man.gameObject, 0);
+            man.PlaceAt(new Vector3(0, 0, 0.75f), 0, PState.Standing);
+            var cam = pl.cam.transform;
+            var eye = new Vector3(0, 1.62f, 1.55f);
+            yield return TrStill(1.6f, eye, eye + Vector3.forward * 5f);
+            man.LookAt(eye);
+            for (float t = 0; t < 0.22f; t += Time.deltaTime)
+            {
+                cam.position = eye; cam.rotation = Quaternion.Euler(-4f * t / 0.22f, 180f * Mathf.SmoothStep(0, 1, t / 0.22f), 0);
+                yield return null;
+            }
+            TrHit(1f);
+            yield return TrStill(1.0f, eye, new Vector3(0, 1.45f, 0.75f));
+            Cue("cut", "black");
+            yield return TrBlack(0.7f);
+
+            // 11. Lights out: he only walks when you look away
+            Cue("cut", "stalker"); Cue("caption", "He only moves when you look away.");
+            bus.SetAllLights(false); ui.dread = 0.85f;
+            var seat = new Vector3(0, 1.62f, 3.2f); var down = new Vector3(0, 1.2f, -5f);
+            float[] zs = { -4.6f, -2.6f, -0.9f };
+            for (int i = 0; i < zs.Length; i++)
+            {
+                TrOpen();
+                man.PlaceAt(new Vector3(0, 0, zs[i]), 0, PState.Standing); man.LookAt(seat);
+                Cue("heart", (i + 1).ToString());
+                yield return TrStill(i == 0 ? 2.2f : 1.4f, seat, down);
+                yield return TrBlack(i == 0 ? 0.5f : 0.35f);
+            }
+            TrOpen();
+            man.PlaceAt(new Vector3(0, 0, 2.7f), 0, PState.Standing); man.LookAt(seat);
+            TrHit(1.2f, "lunge");
+            yield return TrStill(0.7f, seat, new Vector3(0, 1.5f, 2.7f));
+            Cue("cut", "black");
+            yield return TrBlack(1.0f);
+
+            // 12. Title
+            Cue("title");
+            yield return TrBlack(6.5f);
+            Cue("end");
+            trRec = false;
+            yield return null;
+            trCues.Close();
+            Debug.Log("[TLP] Trailer recorded " + trFrame + " frames");
+            Application.Quit();
+        }
+
+#endif
 
         IEnumerator BotStart(int fromChapter)
         {

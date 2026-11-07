@@ -18,7 +18,7 @@ namespace TLP
 
         // modal state
         public bool menuOpen = true, paused, settingsOpen, howToOpen, manifestOpen, ticketOpen, docOpen, cinematic, creditsOpen;
-        public bool hasManifest, gameStarted;
+        public bool hasManifest, gameStarted, trailer;
         public bool Modal => menuOpen || paused || manifestOpen || ticketOpen || docOpen || cinematic || creditsOpen;
 
         // subtitles
@@ -264,7 +264,7 @@ namespace TLP
                 }
 
                 // crosshair & prompt
-                if (!Modal && pl)
+                if (!Modal && pl && !trailer)
                 {
                     bool f = pl.focus;
                     var cc = GUI.color;
