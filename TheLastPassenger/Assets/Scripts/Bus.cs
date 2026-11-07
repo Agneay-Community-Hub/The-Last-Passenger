@@ -186,7 +186,7 @@ namespace TLP
         }
 
         // Seated pose correction for the animated characters (hips onto the seat cushion).
-        public static Vector3 ModelSitOffset = new Vector3(0, 0.0f, -0.12f);
+        public static Vector3 ModelSitOffset = new Vector3(0, 0.02f, 0.16f);
 
         public static Passenger Make(Transform parent, string id, string displayName, string clothes, string legsMat, string skin, string hair, float scale, bool child)
             => Make(parent, id, displayName, new Recipe { clothes = clothes, legs = legsMat, skin = skin, hair = hair, scale = scale, child = child });
@@ -205,7 +205,7 @@ namespace TLP
             var prefab = string.IsNullOrEmpty(r.model) ? null : GameAssets.Model(r.model);
             if (prefab && GameAssets.Animator)
             {
-                // Quaternius characters face -Z after import; turn them to face +Z like everything else.
+                // Quaternius characters already face +Z after import (ModelYaw stays 0).
                 var pivot = B.Empty(body, "ModelPivot", Vector3.zero, new Vector3(0, ModelYaw, 0)).transform;
                 var m = Object.Instantiate(prefab, pivot, false);
                 m.name = r.model;
@@ -216,7 +216,8 @@ namespace TLP
                 anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
                 p.anim = anim;
                 p.head = anim.isHuman ? anim.GetBoneTransform(HumanBodyBones.Head) : null;
-                p.sitOffset = ModelSitOffset;
+                // Sit back against the seat, and lift scaled-down people (Bala) so their hips reach the cushion.
+                p.sitOffset = new Vector3(ModelSitOffset.x, ModelSitOffset.y + 0.5f * (1f - r.scale) / r.scale, ModelSitOffset.z / r.scale);
                 foreach (var rend in m.GetComponentsInChildren<Renderer>())
                 {
                     rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -257,7 +258,7 @@ namespace TLP
             return p;
         }
 
-        public static float ModelYaw = 180f;
+        public static float ModelYaw = 0f;
 
         /// <summary>Attach a prop to a bone, keeping its world size. People without a skeleton keep it on the body.</summary>
         public static GameObject Attach(Passenger p, HumanBodyBones bone, GameObject prop, Vector3 worldOffset)

@@ -290,6 +290,9 @@ namespace TLP.EditorTools
             // Building over an existing player produced a corrupt level0, so always start from an empty folder.
             var outDir = target == BuildTarget.WebGL ? path : Path.GetDirectoryName(path);
             if (Directory.Exists(outDir)) FileUtil.DeleteFileOrDirectory(outDir);
+            // A stale cached level0 (the scene is regenerated on every build) caused "level0 is corrupted" crashes.
+            foreach (var cache in new[] { "Library/PlayerDataCache", "Library/Bee/artifacts", "Library/BuildPlayerData" })
+                if (Directory.Exists(cache)) FileUtil.DeleteFileOrDirectory(cache);
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath },

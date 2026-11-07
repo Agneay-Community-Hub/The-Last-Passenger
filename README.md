@@ -25,7 +25,7 @@ Made for **[GitHub Game Off 2026](https://itch.io/jam/game-off-2026)**. The them
 | Skip a subtitle line | **SPACE** |
 | Pause / settings | **ESC** |
 
-The first shift has a step-by-step tutorial. Each tip appears when it becomes relevant and ticks itself off once you do it; you can turn tips off in Settings. **How to play**, on the title screen and in the pause menu, explains the conductor's job, the manifest and the mirror.
+A new game starts with a short **training run** at the depot. Murugan, the timekeeper, sets up every situation the job needs (a passenger to ticket, a head count, someone to find in the mirror, someone getting off), and each of the 15 steps has to be done before the next one starts. A yellow marker on screen always points at what to use next. Both can be switched off in Settings. **How to play**, on the title screen and in the pause menu, explains the conductor's job, the manifest and the mirror.
 
 Settings cover mouse sensitivity, volume, subtitle size, invert Y and reduced motion (no head bob or bus sway). Your progress saves at the start of each chapter, and **Continue** puts you back at that chapter.
 
@@ -83,5 +83,7 @@ Builds/WindowsDev/TheLastPassenger.exe -screen-fullscreen 0 -tlpbot A -tlpshots 
 
 Design, story and code: Agneay B Nair, built with Claude Code.
 Story and design based on *The Last Passenger* game design document and India production bible.
+
+Third-party assets (all CC0 or OFL; licence files are next to them in `Assets/ThirdParty`): characters and the Universal Animation Library by Quaternius, construction props from City Kit Roads by Kenney, PBR textures from ambientCG, and the Noto Sans Tamil font.
 
 Licensed under the MIT License (see `LICENSE`).

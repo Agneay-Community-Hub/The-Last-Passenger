@@ -89,6 +89,10 @@ namespace TLP
             PersonBuilder.Attach(bala, HumanBodyBones.Chest,
                 B.Box(bala.body, "Satchel", new Vector3(0, 1.05f, -0.2f), new Vector3(0.3f, 0.32f, 0.12f), "BalaShorts"), new Vector3(0, -0.05f, -0.14f));
 
+            // Murugan, the depot timekeeper, only appears in the training run.
+            Make("murugan", "Murugan", new PersonBuilder.Recipe { clothes = "Selvam", legs = "Khaki", skin = "SkinDark", hair = "Hair", model = "Farmer",
+                recolor = Map("Skin", "SkinDark") }, new Vector3(0.98f, 0, 2.4f), "R3", "Old Market", 1);
+
             var driver = PersonBuilder.Make(peopleRoot, "raghavan", "Raghavan", new PersonBuilder.Recipe { clothes = "Khaki", legs = "Khaki", skin = "SkinDark", hair = "Hair", model = "Casual2", recolor = khakiDriver });
             driver.seatPos = new Vector3(0.75f, 0, 4.85f);
             driver.isDriver = true;
@@ -168,6 +172,7 @@ namespace TLP
                 if (args[i] == "-tlpshots") shots = args[i + 1];
                 if (args[i] == "-tlpchapter") int.TryParse(args[i + 1], out fromCh);
             }
+            if (System.Array.IndexOf(args, "-tlpportrait") >= 0) { story.ShowTitle(); ui.menuOpen = false; ui.gameStarted = true; ui.StartCoroutine(story.Portraits(shots)); return; }
             if (botEnding != null)
             {
                 story.botTutorial = System.Array.IndexOf(args, "-tlptutorial") >= 0;

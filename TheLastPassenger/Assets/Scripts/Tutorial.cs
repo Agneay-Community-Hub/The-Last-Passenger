@@ -81,15 +81,18 @@ namespace TLP
             mirrorHeldT = 0; bellRings = 0;
         }
 
-        public bool Active
+        // Training mode: the story drives one mandatory step at a time.
+        public int forcedIndex, forcedTotal;
+        public string forcedTitle, forcedText;
+        public bool Forced => !string.IsNullOrEmpty(forcedText);
+        public void Force(int index, int total, string title, string text)
         {
-            get
-            {
-                var st = StoryDirector.I; var ui = UIManager.I;
-                return st != null && ui != null && ui.gameStarted && !ui.menuOpen && !ui.creditsOpen
-                       && st.settings.tutorial && st.F.chapter <= 2 && (!st.bot || st.botTutorial) && Done < Total;
-            }
+            if (Forced && text != forcedText && index > forcedIndex) { justCompleted = 1.0f; lastCompleted = forcedTitle; }
+            forcedIndex = index; forcedTotal = total; forcedTitle = title; forcedText = text;
         }
+
+        // The old contextual tips are replaced by the training run.
+        public bool Active => false;
 
         void Update()
         {
@@ -103,6 +106,7 @@ namespace TLP
             if (ui.countRequested) countSeen = true;
             if (pl.mirrorHeld) mirrorHeldT += Time.deltaTime;
 
+            if (Forced) { CurrentTitle = forcedTitle; CurrentText = forcedText; return; }
             if (!Active) return;
             try
             {

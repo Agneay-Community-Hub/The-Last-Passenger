@@ -6,50 +6,6 @@ using Object = UnityEngine.Object;
 
 namespace TLP
 {
-    /// <summary>Holds every material the game uses. Populated by the editor builder so the build includes their shaders.</summary>
-    public class Mats : MonoBehaviour
-    {
-        public Material[] list;
-        static Dictionary<string, Material> map;
-
-        public static void Init(Material[] mats)
-        {
-            map = new Dictionary<string, Material>();
-            if (mats == null) return;
-            foreach (var m in mats) if (m) map[m.name] = m;
-        }
-
-        void Awake() { Init(list); }
-
-        public static Material Get(string n)
-        {
-            if (map == null) { var m = Object.FindAnyObjectByType<Mats>(); Init(m ? m.list : null); }
-            if (n != null && map.TryGetValue(n, out var mat)) return mat;
-            Debug.LogWarning("[TLP] Missing material " + n);
-            foreach (var kv in map) return kv.Value;
-            return null;
-        }
-    }
-
-    /// <summary>Imported models, the character animator and extra fonts, registered by the editor builder.</summary>
-    public class GameAssets : MonoBehaviour
-    {
-        public GameObject[] models;
-        public RuntimeAnimatorController animator;
-        public Font tamil;
-        static GameAssets inst;
-        static GameAssets I { get { if (!inst) inst = Object.FindAnyObjectByType<GameAssets>(); return inst; } }
-        void Awake() { inst = this; }
-        public static GameObject Model(string n)
-        {
-            if (!I || I.models == null) return null;
-            foreach (var m in I.models) if (m && m.name == n) return m;
-            return null;
-        }
-        public static RuntimeAnimatorController Animator => I ? I.animator : null;
-        public static Font Tamil => I ? I.tamil : null;
-    }
-
     /// <summary>Anything the player can look at and press E on.</summary>
     public class Interactable : MonoBehaviour
     {
@@ -265,6 +221,7 @@ namespace TLP
         public bool invertY;
         public bool reduceMotion;
         public bool tutorial = true;
+        public bool marker = true;
 
         public static Settings Load()
         {

@@ -247,7 +247,7 @@ namespace TLP
             if (gameStarted && !menuOpen)
             {
                 // objective
-                if (objective != null && !cinematic)
+                if (objective != null && !cinematic && !manifestOpen && !ticketOpen)
                 {
                     string o = objective();
                     if (o != lastObjective) { lastObjective = o; objectiveFlash = 2.5f; }
@@ -277,6 +277,9 @@ namespace TLP
                         GUI.Label(new Rect(w / 2 - 500, h / 2 + 30, 1000, 40), p, Shadowed(sPrompt));
                     }
                 }
+
+                // objective marker
+                if (!Modal && st != null && st.settings.marker && pl) DrawMarker(st, pl, w, h);
 
                 // hint line
                 if (hintT > 0 && !Modal)
@@ -565,19 +568,66 @@ namespace TLP
             if (t == null) return;
             bool flash = t.justCompleted > 0;
             if (string.IsNullOrEmpty(t.CurrentText) && !flash) return;
-            float pw = 430;
-            var body = new GUIStyle(sBody) { fontSize = 23 };
+            float pw = 480;
+            var body = new GUIStyle(sBody) { fontSize = 25 };
             string text = flash && string.IsNullOrEmpty(t.CurrentText) ? "" : t.CurrentText ?? "";
             float bh = string.IsNullOrEmpty(text) ? 0 : body.CalcHeight(new GUIContent(text), pw - 40);
             var r = new Rect(w - pw - 24, h * 0.24f, pw, bh + 92);
+            if (manifestOpen || ticketOpen)
+            {
+                // Compact banner above the open panel so it never covers the manifest.
+                pw = Mathf.Min(1280, w - 60);
+                bh = body.CalcHeight(new GUIContent(text), pw - 40);
+                r = new Rect((w - pw) / 2, 4, pw, Mathf.Min(bh + 40, 84));
+                GUI.DrawTexture(r, tDim);
+                GUI.Label(new Rect(r.x + 16, r.y + 6, pw - 32, r.height - 8), "<b><color=#f09a40>" + (t.Forced ? "TRAINING " + t.forcedIndex + "/" + t.forcedTotal : "TIP") + "</color></b>   " + text, new GUIStyle(body) { fontSize = 21, richText = true });
+                return;
+            }
             GUI.DrawTexture(r, tDim);
             GUI.DrawTexture(new Rect(r.x, r.y, 4, r.height), flash ? tGreen : tRed);
             var head = new GUIStyle(sChapter) { fontSize = 18 };
-            string title = "TUTORIAL" + (string.IsNullOrEmpty(t.CurrentTitle) ? "" : "  ·  " + t.CurrentTitle) + "      " + t.Done + "/" + t.Total + " done";
+            string title = t.Forced ? "TRAINING  " + t.forcedIndex + "/" + t.forcedTotal + "  ·  " + t.forcedTitle
+                                    : "TUTORIAL" + (string.IsNullOrEmpty(t.CurrentTitle) ? "" : "  ·  " + t.CurrentTitle);
             if (flash) title = "DONE  ·  " + t.lastCompleted;
             GUI.Label(new Rect(r.x + 20, r.y + 12, pw - 40, 26), title, head);
             GUI.Label(new Rect(r.x + 20, r.y + 42, pw - 40, bh + 4), text, body);
-            GUI.Label(new Rect(r.x + 20, r.yMax - 32, pw - 40, 24), "tips can be turned off in Settings", new GUIStyle(sSmall) { fontSize = 16 });
+            GUI.Label(new Rect(r.x + 20, r.yMax - 32, pw - 40, 24), "training can be switched off in Settings for replays", new GUIStyle(sSmall) { fontSize = 16 });
+        }
+
+        void DrawMarker(StoryDirector st, PlayerController pl, float w, float h)
+        {
+            var target = st.CurrentTarget;
+            if (!target.HasValue) return;
+            var cam = pl.cam;
+            var sp = cam.WorldToScreenPoint(target.Value);
+            bool behind = sp.z < 0;
+            float x = sp.x / S, y = (Screen.height - sp.y) / S;
+            if (behind) { x = w - x; y = h - y; }
+            float m = 70;
+            bool off = behind || x < m || x > w - m || y < m || y > h - m;
+            if (off)
+            {
+                // push to the screen edge in the target's direction
+                var c = new Vector2(w / 2, h / 2);
+                var d = new Vector2(x, y) - c;
+                if (behind && d.sqrMagnitude < 1) d = new Vector2(0, 1);
+                float k = Mathf.Min((w / 2 - m) / Mathf.Max(Mathf.Abs(d.x), 0.001f), (h / 2 - m) / Mathf.Max(Mathf.Abs(d.y), 0.001f));
+                var e = c + d * k; x = e.x; y = e.y;
+            }
+            float pulse = 0.75f + 0.25f * Mathf.Sin(Time.unscaledTime * 5f);
+            var old = GUI.matrix; var oc = GUI.color;
+            GUI.color = new Color(1f, 0.78f, 0.25f, pulse);
+            GUIUtility.RotateAroundPivot(45, new Vector2(x * S, y * S));
+            GUI.DrawTexture(new Rect(x - 9, y - 9, 18, 18), tWhite);
+            GUI.matrix = old;
+            GUI.color = new Color(0, 0, 0, 0.9f);
+            GUIUtility.RotateAroundPivot(45, new Vector2(x * S, y * S));
+            GUI.DrawTexture(new Rect(x - 4, y - 4, 8, 8), tWhite);
+            GUI.matrix = old;
+            GUI.color = oc;
+            float dist = Vector3.Distance(pl.transform.position, target.Value);
+            string label = off ? (behind ? "behind you" : "this way") : dist.ToString("0") + " m";
+            GUI.Label(new Rect(x - 80, y + 14, 160, 26), label, new GUIStyle(sSmall) { alignment = TextAnchor.MiddleCenter, fontSize = 18, normal = { textColor = new Color(1f, 0.85f, 0.5f) } });
         }
 
         void DrawHowTo(float w, float h)
@@ -640,7 +690,9 @@ namespace TLP
             y += 60;
             if (GUI.Button(new Rect(x, y, 840, 50), "Reduce motion (no head bob / bus sway):  " + (s.reduceMotion ? "ON" : "OFF"), sButton)) s.reduceMotion = !s.reduceMotion;
             y += 60;
-            if (GUI.Button(new Rect(x, y, 840, 50), "Tutorial tips during the first shift:  " + (s.tutorial ? "ON" : "OFF"), sButton)) s.tutorial = !s.tutorial;
+            if (GUI.Button(new Rect(x, y, 840, 50), "Training before a new shift:  " + (s.tutorial ? "ON" : "OFF"), sButton)) s.tutorial = !s.tutorial;
+            y += 60;
+            if (GUI.Button(new Rect(x, y, 840, 50), "Objective marker on screen:  " + (s.marker ? "ON" : "OFF"), sButton)) s.marker = !s.marker;
             y += 80;
             if (GUI.Button(new Rect(w / 2 - 200, y, 400, 60), "Back", sButton)) { settingsOpen = false; s.Save(); }
         }

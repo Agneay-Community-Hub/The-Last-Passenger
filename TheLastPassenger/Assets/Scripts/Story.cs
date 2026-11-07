@@ -124,7 +124,8 @@ namespace TLP
         {
             SetupState(start, false);
             ui.fade = 1; ui.fadeTarget = 0;
-            ui.ShowHint(start == 1 ? 40 : 12);
+            if (start == 1 && settings.tutorial && (!bot || botTutorial)) yield return Training();
+            ui.ShowHint(start == 1 ? 25 : 12);
             for (int c = start; c <= 7 && !ending; c++)
             {
                 F.chapter = c;
@@ -409,6 +410,216 @@ namespace TLP
         }
 
         Vector3 Seat(string id) => P[id].seatPos + Vector3.up * 0.6f;
+
+        // ================================================================== TRAINING (before chapter 1)
+
+        public bool inTraining;
+        public Func<Vector3> markerOverride;
+
+        /// <summary>Where the on-screen objective marker should point right now (null = nowhere).</summary>
+        public Vector3? CurrentTarget
+        {
+            get
+            {
+                if (ending || ui == null || !ui.gameStarted || ui.cinematic || pl == null) return null;
+                if (markerOverride != null) return markerOverride();
+                foreach (var id in specialOrder)
+                {
+                    Passenger p = id == "raghavan" ? driver : (P.TryGetValue(id, out var q) ? q : null);
+                    if (p && p.gameObject.activeInHierarchy)
+                        return (p.head ? p.head.position : p.transform.position + Vector3.up * 1.5f) + Vector3.up * 0.35f;
+                }
+                foreach (var kv in bus.props)
+                {
+                    var it = kv.Value;
+                    if (kv.Key.StartsWith("Bell") || !it.highlight || !it.Usable || !it.gameObject.activeInHierarchy) continue;
+                    return it.transform.position + Vector3.up * 0.12f;
+                }
+                if (BellPending)
+                {
+                    var a = bus.Prop("BellFront").transform.position; var b = bus.Prop("BellRear").transform.position;
+                    return (pl.transform.position - a).sqrMagnitude < (pl.transform.position - b).sqrMagnitude ? a : b;
+                }
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// A short, mandatory practice run at the depot. Murugan, the timekeeper, creates every situation the job needs
+        /// (a passenger to ticket, a count, someone in the mirror, someone getting off), and each step must be done to continue.
+        /// </summary>
+        IEnumerator Training()
+        {
+            inTraining = true;
+            var t = Tutorial.I;
+            const int N = 15;
+            int step = 0;
+            void Step(string title, string text)
+            {
+                step++;
+                t.Force(step, N, title, text);
+                ui.chapterTitle = "TRAINING  -  BEFORE THE SHIFT";
+                Obj(text);
+                au.Play2D(au.clink, 0.12f, 1.4f);
+                Debug.Log("[TLP] Training step " + step + ": " + title);
+                if (bot) StartCoroutine(Delayed(0.4f, () => Shot("train" + step.ToString("00") + "_" + title.Replace(' ', '_'))));
+            }
+            var mur = P["murugan"];
+            P["kavin"].Hide(); P["lakshmi"].Hide();
+            mur.PlaceAt(new Vector3(-3.6f, -0.15f, 7.4f), 210, PState.Standing);
+            pl.Teleport(new Vector3(-7.0f, -0.13f, 1.8f), 20);
+            ui.Card("TRAINING", "Murugan, the depot timekeeper, will show you the job.\nDo each step to move on to the next.");
+            yield return new WaitForSeconds(4f);
+            ui.HideCard();
+
+            // 1. Look
+            float look0 = pl.lookTravel;
+            Step("LOOK", "Move the MOUSE to look around the depot.");
+            yield return Until(() => pl.lookTravel - look0 > 150f, () => pl.lookTravel += 400f);
+
+            // 2. Walk
+            markerOverride = () => mur.transform.position + Vector3.up * 2.1f;
+            Step("WALK", "Walk to Murugan using  W A S D. The yellow marker shows where to go.");
+            yield return Until(() => Vector3.Distance(pl.transform.position, mur.transform.position) < 2.2f,
+                () => { pl.Teleport(mur.transform.position + new Vector3(-1.4f, 0.02f, -0.6f), 70); pl.Aim(mur.head.position); });
+            markerOverride = null;
+
+            // 3. Interact
+            bool talked = false;
+            Special("murugan", "Talk - Murugan", () => { Unspecial("murugan"); talked = true; });
+            Step("INTERACT", "Look at Murugan. When the dot in the middle of the screen turns orange, press  E  (or left-click).");
+            yield return Until(() => talked);
+
+            // 4. Skip a subtitle line
+            mur.LookAt(pl.cam.transform.position);
+            t.spaceSkipped = false;
+            ui.Say("MURUGAN", "Ah, the relief conductor. Good. Raghavan won't wait for anyone tonight.");
+            ui.Say("MURUGAN", "Before you go, I'll show you the job. Five minutes. You can practise on me.");
+            ui.Say("MURUGAN", "I'll be your passenger. Pretend I'm going to Old Market.");
+            ui.Say("MURUGAN", "Those words at the bottom keep coming until you skip them. Go on, try it.");
+            Step("SKIP A LINE", "Subtitles move on by themselves. Press  SPACE  now to skip to the next line.");
+            yield return Until(() => t.spaceSkipped, () => { t.spaceSkipped = true; ui.ClearLines(); });
+
+            // 5. Board
+            markerOverride = () => new Vector3(-1.05f, 1.2f, 4.6f);
+            Step("BOARD THE BUS", "Climb aboard through the open front door of the bus (marked).");
+            yield return Until(() => pl.transform.position.x > -1.1f, () => pl.Teleport(new Vector3(-0.4f, 0.02f, 4.2f), 180));
+            markerOverride = null;
+
+            // 6. Take the manifest
+            bool got = false;
+            Use("Manifest", "Take the manifest", () =>
+            {
+                got = true; ui.hasManifest = true;
+                bus.ShowObj("Manifest", false);
+                bus.Prop("Manifest").Clear();
+            });
+            Step("THE MANIFEST", "Take the passenger manifest from its hook beside the door. Look at it and press  E.");
+            yield return Until(() => got);
+
+            // 7. Open and close it
+            bool opened = false;
+            Step("OPEN THE MANIFEST", "Press  TAB  (or M) to open the manifest. Look it over, then press  TAB  again to close it.");
+            yield return Until(() => { if (ui.manifestOpen) opened = true; return opened && !ui.manifestOpen; }, () => opened = true);
+
+            // 8. Issue a ticket: Murugan boards and asks for one.
+            StartCoroutine(TraineeBoards(mur));
+            bool ticketDone = false;
+            OfferTicket(mur, () => { ticketDone = true; ui.Say("MURUGAN", "Old Market, eight rupees. Correct."); });
+            Step("ISSUE A TICKET", "Murugan is boarding and wants a ticket to OLD MARKET. Look at him, press  E, then pick Old Market on the ticket machine.");
+            yield return Until(() => ticketDone);
+
+            // 9. Mark aboard
+            Step("MARK ABOARD", "Open the manifest (TAB) and press  ABOARD  on Murugan's row. Then close it (TAB).");
+            yield return Until(() => Marked("murugan", 1) && !ui.manifestOpen, () => { var r = Row("murugan"); if (r != null) OnMark(r, 1); });
+
+            // 10. Count
+            Step("COUNT", "The driver needs a head count. Open the manifest, set the number to the passengers you can SEE (only Murugan), then press  Confirm count.");
+            bool countOk = false;
+            while (!countOk)
+            {
+                bool done = false; int ans = -1;
+                ui.RequestCount(n => { ans = n; done = true; });
+                yield return Until(() => done, () => ui.AnswerCount(1));
+                ui.manifestOpen = false;
+                Debug.Log("[TLP] Training count answer " + ans);
+                if (ans == 1) countOk = true;
+                else ui.Toast("Not quite: count only the people you can actually see aboard. That's just Murugan. Try again.", 5f);
+            }
+            yield return new WaitForSeconds(0.5f);
+
+            // 11. Mirror: Murugan walks to the back.
+            yield return new WaitUntil(() => mur.state == PState.Seated); // he may still be walking to his seat
+            ui.Say("MURUGAN", "Now watch. I'll go to the back. Don't turn around.");
+            Debug.Log("[TLP] Training: Murugan walks to the back from " + mur.transform.position + " state=" + mur.state);
+            mur.Sit(false);
+            yield return mur.Walk(new Vector3(0, 0, mur.seatPos.z), new Vector3(0, 0, -4.3f));
+            mur.transform.rotation = Quaternion.identity;
+            mur.state = PState.Standing;
+            float held = 0;
+            Step("THE MIRROR", "Murugan is at the back of the bus. Without turning around, hold  SHIFT  to glance at the rear-view mirror and find him.");
+            yield return Until(() => { if (pl.mirrorHeld) held += Time.deltaTime; return held > 1.5f; },
+                () => { pl.Aim(new Vector3(-0.66f, 1.9f, 5.4f)); pl.forceMirror = true; });
+            pl.forceMirror = false;
+            ui.Say("MURUGAN", "See me? Use that mirror often. It shows the whole bus behind you.");
+            yield return new WaitForSeconds(1.5f);
+
+            // 12. Mark exited: Murugan gets off at the rear door.
+            yield return bus.Door(false, true);
+            mur.leaving = true;
+            yield return mur.Walk(Passenger.RearAisle, Passenger.RearDoor, Passenger.RearOutside, new Vector3(-6f, -0.15f, -5f));
+            mur.gameObject.SetActive(false); mur.leaving = false; mur.state = PState.Gone;
+            yield return bus.Door(false, false);
+            Step("MARK EXITED", "Murugan got off through the rear door. Open the manifest and press  EXITED  on his row, then close it.");
+            yield return Until(() => Marked("murugan", 2) && !ui.manifestOpen, () => { var r = Row("murugan"); if (r != null) OnMark(r, 2); });
+
+            // 13. Read something
+            bool read = false;
+            Evidence("RouteCard", "Read the route card", "ROUTE CARD  -  117 NIGHT SERVICE",
+                "1.  Old Market Depot\n2.  Old Market\n3.  Hospital Road\n4.  Cinema Street\n5.  River Road\n6.  Central Bus Stand\n\nNotes, tickets and papers you find tonight open like this. Some of them matter later.\n\nPress  E  to close.",
+                () => read = true);
+            Step("READ", "Look at the route card on the dashboard (marked) and press  E  to read it. Press  E  again to close it.");
+            yield return Until(() => read);
+
+            // 14. Bell
+            bool rung = false;
+            bellAction = () => rung = true;
+            bus.Prop("BellFront").highlight = true; bus.Prop("BellRear").highlight = true;
+            Step("THE BELL", "Press  E  on the red bell button beside a door. Two rings tell the driver to go; one ring asks him to stop.");
+            yield return Until(() => rung, () => RingBell());
+            bus.Prop("BellFront").highlight = false; bus.Prop("BellRear").highlight = false;
+            ui.Say("RAGHAVAN", "Not yet. Finish your training first.");
+
+            // 15. Pause
+            bool sawPause = false;
+            Step("PAUSE", "Press  ESC  to pause the game, then click  Resume  to come back. (How to play is also in that menu.)");
+            yield return Until(() => { if (ui.paused) sawPause = true; return sawPause && !ui.paused; }, () => sawPause = true);
+
+            // Done: clean up everything the practice changed.
+            t.Force(0, 0, null, null);
+            special.Clear(); specialOrder.Clear(); bellAction = null; markerOverride = null;
+            ui.ClearLines();
+            ui.Card("TRAINING COMPLETE", "You know the job. Now take the last service of the night.");
+            Debug.Log("[TLP] Training complete");
+            yield return new WaitForSeconds(3.5f);
+            ui.HideCard();
+            ui.fadeSpeed = 1.2f; ui.fadeTarget = 1;
+            yield return new WaitForSeconds(1f);
+            data = new SaveData();
+            foreach (var c in crowd) if (c) Destroy(c);
+            crowd.Clear();
+            ui.hasManifest = false;
+            t.ResetAll();
+            inTraining = false;
+            SetupState(1, false);
+            ui.fadeTarget = 0; ui.fadeSpeed = 0.6f;
+        }
+
+        IEnumerator TraineeBoards(Passenger mur)
+        {
+            yield return mur.Walk(Passenger.FrontOutside);
+            yield return mur.BoardFront();
+        }
 
         // ================================================================== CHAPTER 1
 
@@ -1258,6 +1469,40 @@ namespace TLP
             bot = true; botEnding = endingLetter; shotDir = shots; timeScale = 3f;
             Debug.Log("[TLP] Bot playthrough, ending " + endingLetter + ", from chapter " + fromChapter);
             StartCoroutine(BotStart(fromChapter));
+#endif
+        }
+
+        /// <summary>Dev aid: close-up screenshots of seated people from the aisle.</summary>
+        public IEnumerator Portraits(string dir)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            shotDir = dir;
+            JumpTo(3);
+            yield return new WaitForSecondsRealtime(2f);
+            StopAllCoroutines(); // freeze the story (this coroutine runs on the UI object)
+            route.HaltNow();
+            var views = new (string name, Vector3 eye, Vector3 at)[]
+            {
+                ("selvam_side", new Vector3(0.15f, 1.0f, 1.0f), new Vector3(-0.98f, 0.7f, 1.0f)),
+                ("bala_side", new Vector3(-0.15f, 1.0f, 0.4f), new Vector3(0.98f, 0.55f, 0.4f)),
+                ("kavin_side", new Vector3(-0.15f, 1.0f, -1.6f), new Vector3(0.98f, 0.7f, -1.6f)),
+                ("kavin_front", new Vector3(0.0f, 1.5f, -0.2f), new Vector3(0.98f, 0.8f, -1.6f)),
+                ("lakshmi_front", new Vector3(0.0f, 1.5f, -2.4f), new Vector3(-0.98f, 0.8f, -3.8f)),
+                ("driver", new Vector3(-0.3f, 1.55f, 4.1f), new Vector3(0.75f, 1.0f, 4.9f)),
+            };
+            foreach (var v in views)
+            {
+                ui.cinematic = true;
+                pl.lookOverrideWeight = 1;
+                pl.cam.transform.position = v.eye;
+                pl.cam.transform.LookAt(v.at);
+                yield return new WaitForSecondsRealtime(0.6f);
+                Shot(v.name);
+                yield return new WaitForSecondsRealtime(0.3f);
+            }
+            Application.Quit();
+#else
+            yield break;
 #endif
         }
 
