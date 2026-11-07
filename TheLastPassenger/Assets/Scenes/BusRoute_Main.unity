@@ -94,7 +94,7 @@ LightmapSettings:
     m_TrainingDataDestination: TrainingData
     m_LightProbeSampleCountMultiplier: 4
   m_LightingDataAsset: {fileID: 20201, guid: 0000000000000000f000000000000000, type: 0}
-  m_LightingSettings: {fileID: 1481428933}
+  m_LightingSettings: {fileID: 531770783}
 --- !u!196 &4
 NavMeshSettings:
   serializedVersion: 2
@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &686131464
+--- !u!1 &83116340
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,10 +127,10 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 686131468}
-  - component: {fileID: 686131467}
-  - component: {fileID: 686131466}
-  - component: {fileID: 686131465}
+  - component: {fileID: 83116344}
+  - component: {fileID: 83116343}
+  - component: {fileID: 83116342}
+  - component: {fileID: 83116341}
   m_Layer: 0
   m_Name: Game
   m_TagString: Untagged
@@ -138,25 +138,25 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &686131465
+--- !u!114 &83116341
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 686131464}
+  m_GameObject: {fileID: 83116340}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 13cb71eeeeecd814cb76d3208a9f28ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TLP.GameBoot
---- !u!114 &686131466
+--- !u!114 &83116342
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 686131464}
+  m_GameObject: {fileID: 83116340}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6eafc52b5fc4db546b23a5180e3daf6b, type: 3}
@@ -184,13 +184,13 @@ MonoBehaviour:
   - {fileID: 919132149155446097, guid: 5602a5505b2d0e8428aadde95b61c429, type: 3}
   animator: {fileID: 9100000, guid: 762007a2316c38945bd6303b48f67ca4, type: 2}
   tamil: {fileID: 12800000, guid: ee7a240fec1cb854baebd6ab476a02d3, type: 3}
---- !u!114 &686131467
+--- !u!114 &83116343
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 686131464}
+  m_GameObject: {fileID: 83116340}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 70c3b55123352e54eae72613940bda6c, type: 3}
@@ -262,13 +262,13 @@ MonoBehaviour:
   - {fileID: 2100000, guid: 117514f18123d044a8bfb0f88fbabc60, type: 2}
   - {fileID: 2100000, guid: 73f27ca42aa7aeb4b8fd5c56f54cd731, type: 2}
   - {fileID: 2100000, guid: 1b1842778ed80b049b324a3035b9f648, type: 2}
---- !u!4 &686131468
+--- !u!4 &83116344
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 686131464}
+  m_GameObject: {fileID: 83116340}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -277,7 +277,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!850595691 &1481428933
+--- !u!850595691 &531770783
 LightingSettings:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -348,4 +348,4 @@ LightingSettings:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 686131468}
+  - {fileID: 83116344}
