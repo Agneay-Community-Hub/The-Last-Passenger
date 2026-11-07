@@ -25,6 +25,8 @@ Made for **[GitHub Game Off 2026](https://itch.io/jam/game-off-2026)**. The them
 | Skip a subtitle line | **SPACE** |
 | Pause / settings | **ESC** |
 
+The first shift has a step-by-step tutorial. Each tip appears when it becomes relevant and ticks itself off once you do it; you can turn tips off in Settings. **How to play**, on the title screen and in the pause menu, explains the conductor's job, the manifest and the mirror.
+
 Settings cover mouse sensitivity, volume, subtitle size, invert Y and reduced motion (no head bob or bus sway). Your progress saves at the start of each chapter, and **Continue** puts you back at that chapter.
 
 ## The game

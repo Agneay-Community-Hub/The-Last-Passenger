@@ -120,6 +120,7 @@ namespace TLP
             story.reflectionBadge = group.gameObject;
 
             var ui = new GameObject("UI").AddComponent<UIManager>();
+            ui.gameObject.AddComponent<Tutorial>();
             story.Init(bus, route, ui, pl, au);
 
             string pending = StoryDirector.pendingStart;
@@ -136,7 +137,13 @@ namespace TLP
                 if (args[i] == "-tlpshots") shots = args[i + 1];
                 if (args[i] == "-tlpchapter") int.TryParse(args[i + 1], out fromCh);
             }
-            if (botEnding != null) { story.StartBot(botEnding, shots, fromCh); return; }
+            if (botEnding != null)
+            {
+                story.botTutorial = System.Array.IndexOf(args, "-tlptutorial") >= 0;
+                story.botHowTo = System.Array.IndexOf(args, "-tlphowto") >= 0;
+                story.StartBot(botEnding, shots, fromCh);
+                return;
+            }
 #endif
             if (pending == "new") story.NewGame();
             else if (pending == "continue") story.Continue();

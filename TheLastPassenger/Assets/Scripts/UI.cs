@@ -16,7 +16,7 @@ namespace TLP
         public static UIManager I;
 
         // modal state
-        public bool menuOpen = true, paused, settingsOpen, manifestOpen, ticketOpen, docOpen, cinematic, creditsOpen;
+        public bool menuOpen = true, paused, settingsOpen, howToOpen, manifestOpen, ticketOpen, docOpen, cinematic, creditsOpen;
         public bool hasManifest, gameStarted;
         public bool Modal => menuOpen || paused || manifestOpen || ticketOpen || docOpen || cinematic || creditsOpen;
 
@@ -54,7 +54,7 @@ namespace TLP
         float hintT;
 
         GUIStyle sTitle, sBig, sBody, sSmall, sSub, sSpeaker, sPrompt, sButton, sPaper, sPaperBold, sPaperSmall, sToggle, sCenter, sObjective, sChapter;
-        Texture2D tBlack, tPaper, tDim, tWhite, tFrame, tTicket, tRed;
+        Texture2D tGreen, tBlack, tPaper, tDim, tWhite, tFrame, tTicket, tRed;
         float S => Screen.height / 1080f;
         float VW => Screen.width / S;
         const float VH = 1080f;
@@ -68,6 +68,7 @@ namespace TLP
         {
             if (sTitle != null) return;
             tBlack = Tex(new Color(0, 0, 0, 1));
+            tGreen = Tex(new Color(0.4f, 0.85f, 0.45f));
             tDim = Tex(new Color(0, 0, 0, 0.62f));
             tPaper = Tex(new Color(0.86f, 0.82f, 0.7f, 0.98f));
             tWhite = Tex(Color.white);
@@ -170,7 +171,11 @@ namespace TLP
             if (current != null)
             {
                 if (!paused && !menuOpen) lineT += Time.deltaTime;
-                if (lineT > current.dur || (Input.GetKeyDown(KeyCode.Space) && lineT > 0.35f && !menuOpen && !paused)) current = null;
+                if (lineT > current.dur || (Input.GetKeyDown(KeyCode.Space) && lineT > 0.35f && !menuOpen && !paused))
+                {
+                    if (lineT <= current.dur && Tutorial.I) Tutorial.I.spaceSkipped = true;
+                    current = null;
+                }
             }
 
             if (creditsOpen)
@@ -318,6 +323,7 @@ namespace TLP
                     GUI.color = c;
                 }
 
+                if (!Modal || manifestOpen || ticketOpen) DrawTutorial(w, h);
                 if (manifestOpen && st) DrawManifest(st, w, h);
                 if (ticketOpen) DrawTicketPanel(w, h);
                 if (docOpen) DrawDoc(w, h);
@@ -370,7 +376,10 @@ namespace TLP
             y += 42;
             int count = st.ManifestCount();
             GUI.Label(new Rect(x, y, pw - 80, 30), "Conductor: ____________        Aboard by your marks: <b>" + count + "</b>        Mistakes cannot be erased.", sPaperSmall);
-            y += 44;
+            y += 34;
+            if (st.data.flags.chapter <= 2 && st.settings.tutorial && !st.finalMode)
+                GUI.Label(new Rect(x, y, pw - 80, 26), "<i>ABOARD = they got on and have a ticket.   EXITED = you saw them get off.   Notes are optional reminders.</i>", sPaperSmall);
+            y += 30;
             float[] col = { 0, 50, 260, 340, 560, 700, 950 };
             string[] head = { "#", "Name", "Seat", "To", "Status", "Mark", "Notes" };
             for (int i = 0; i < head.Length; i++) GUI.Label(new Rect(x + col[i], y, 240, 28), "<b>" + head[i] + "</b>", sPaperSmall);
@@ -454,7 +463,8 @@ namespace TLP
             GUI.DrawTexture(r, tFrame);
             GUI.Label(new Rect(r.x + 30, r.y + 24, pw - 60, 40), "TICKET MACHINE  ·  07-11-2015  01:17", new GUIStyle(sBody) { fontSize = 24 });
             GUI.Label(new Rect(r.x + 30, r.y + 64, pw - 60, 40), "Passenger: " + (ticketFor ? ticketFor.displayName : "?") + "      From: " + ticketFrom, sSmall);
-            float y = r.y + 120;
+            GUI.Label(new Rect(r.x + 30, r.y + 92, pw - 60, 30), "Choose the stop the passenger asked for.", new GUIStyle(sSmall) { fontSize = 19, normal = { textColor = new Color(0.95f, 0.6f, 0.25f) } });
+            float y = r.y + 124;
             var stops = StoryDirector.Stops;
             for (int i = 0; i < stops.Length; i++)
             {
@@ -503,6 +513,7 @@ namespace TLP
         {
             GUI.DrawTexture(new Rect(0, 0, w, h), tDim);
             if (settingsOpen) { DrawSettings(st, w, h); return; }
+            if (howToOpen) { DrawHowTo(w, h); return; }
             GUI.Label(new Rect(0, h * 0.14f, w, 120), "THE LAST PASSENGER", sTitle);
             GUI.Label(new Rect(0, h * 0.14f + 110, w, 50), "NIGHT SHIFT  ·  ROUTE 117  ·  01:17 A.M.", new GUIStyle(sCenter) { fontSize = 28, normal = { textColor = new Color(0.95f, 0.6f, 0.25f) } });
             GUI.Label(new Rect(0, h * 0.14f + 160, w, 50), "\"Conductor... don't count the people you can hear.\"", new GUIStyle(sCenter) { fontSize = 24, fontStyle = FontStyle.Italic });
@@ -515,6 +526,8 @@ namespace TLP
                 if (GUI.Button(new Rect(bx, y, bw, 60), "Continue  (Chapter " + st.SavedChapter + ")", sButton)) st.Continue();
                 y += 70;
             }
+            if (GUI.Button(new Rect(bx, y, bw, 60), "How to play", sButton)) howToOpen = true;
+            y += 70;
             if (GUI.Button(new Rect(bx, y, bw, 60), "Settings", sButton)) settingsOpen = true;
             y += 70;
 #if !UNITY_WEBGL
@@ -530,9 +543,12 @@ namespace TLP
         {
             GUI.DrawTexture(new Rect(0, 0, w, h), tDim);
             if (settingsOpen) { DrawSettings(st, w, h); return; }
+            if (howToOpen) { DrawHowTo(w, h); return; }
             GUI.Label(new Rect(0, h * 0.18f, w, 80), "PAUSED", sBig);
             float bw = 520, bx = (w - bw) / 2, y = h * 0.34f;
             if (GUI.Button(new Rect(bx, y, bw, 60), "Resume", sButton)) { paused = false; Cursor.lockState = CursorLockMode.Locked; }
+            y += 70;
+            if (GUI.Button(new Rect(bx, y, bw, 60), "How to play", sButton)) howToOpen = true;
             y += 70;
             if (GUI.Button(new Rect(bx, y, bw, 60), "Settings", sButton)) settingsOpen = true;
             y += 70;
@@ -540,6 +556,66 @@ namespace TLP
             y += 70;
             if (GUI.Button(new Rect(bx, y, bw, 60), "Quit to title", sButton)) { paused = false; st.ToTitle(); }
             GUI.Label(new Rect(w * 0.1f, h * 0.78f, w * 0.8f, 80), controlsHint, new GUIStyle(sSmall) { alignment = TextAnchor.MiddleCenter, wordWrap = true });
+        }
+
+        void DrawTutorial(float w, float h)
+        {
+            var t = Tutorial.I;
+            if (t == null) return;
+            bool flash = t.justCompleted > 0;
+            if (string.IsNullOrEmpty(t.CurrentText) && !flash) return;
+            float pw = 430;
+            var body = new GUIStyle(sBody) { fontSize = 23 };
+            string text = flash && string.IsNullOrEmpty(t.CurrentText) ? "" : t.CurrentText ?? "";
+            float bh = string.IsNullOrEmpty(text) ? 0 : body.CalcHeight(new GUIContent(text), pw - 40);
+            var r = new Rect(w - pw - 24, h * 0.24f, pw, bh + 92);
+            GUI.DrawTexture(r, tDim);
+            GUI.DrawTexture(new Rect(r.x, r.y, 4, r.height), flash ? tGreen : tRed);
+            var head = new GUIStyle(sChapter) { fontSize = 18 };
+            string title = "TUTORIAL" + (string.IsNullOrEmpty(t.CurrentTitle) ? "" : "  ·  " + t.CurrentTitle) + "      " + t.Done + "/" + t.Total + " done";
+            if (flash) title = "DONE  ·  " + t.lastCompleted;
+            GUI.Label(new Rect(r.x + 20, r.y + 12, pw - 40, 26), title, head);
+            GUI.Label(new Rect(r.x + 20, r.y + 42, pw - 40, bh + 4), text, body);
+            GUI.Label(new Rect(r.x + 20, r.yMax - 32, pw - 40, 24), "tips can be turned off in Settings", new GUIStyle(sSmall) { fontSize = 16 });
+        }
+
+        void DrawHowTo(float w, float h)
+        {
+            GUI.Label(new Rect(0, h * 0.06f, w, 80), "HOW TO PLAY", sBig);
+            float cw = Mathf.Min(1500, w - 80), x = (w - cw) / 2, colW = (cw - 60) / 2, y = h * 0.16f;
+            var head = new GUIStyle(sChapter) { fontSize = 22 };
+            var body = new GUIStyle(sBody) { fontSize = 22 };
+            string left =
+                "<b>YOUR JOB</b>\n" +
+                "You are the conductor on the last night bus. The driver drives. You look after the passengers:\n" +
+                "  1.  Talk to anyone without a ticket (E) and print one for the stop they want.\n" +
+                "  2.  Open the manifest (TAB) and mark them ABOARD.\n" +
+                "  3.  When someone gets off, mark them EXITED.\n" +
+                "  4.  When asked, confirm how many people you can see.\n" +
+                "  5.  Ring the bell: two rings = go, one ring = stop.\n\n" +
+                "<b>THE MANIFEST</b>\n" +
+                "Your memory of the night. Entries are in ink and can't be erased. Marking someone off who is still on the bus, or getting a count wrong, has consequences. You'll see them.\n\n" +
+                "<b>THE MIRROR  (SHIFT)</b>\n" +
+                "Hold SHIFT to glance at the rear-view mirror from anywhere on the bus. It shows the whole cabin behind you. Compare it with what you see when you turn around.";
+            string right =
+                "<b>CONTROLS</b>\n" +
+                "W A S D ............ walk\n" +
+                "Mouse ................ look\n" +
+                "E / left click ...... interact (talk, tickets, bell, doors, evidence)\n" +
+                "hold SHIFT ......... rear-view mirror\n" +
+                "TAB  or  M ........ manifest\n" +
+                "SPACE ............... next subtitle line\n" +
+                "ESC ................... pause\n\n" +
+                "<b>GOOD TO KNOW</b>\n" +
+                "·  Nothing can kill you. There is no combat and no chase.\n" +
+                "·  Your objective is always shown in the top-left corner.\n" +
+                "·  Look closely at things that have no objective: seats, windows, signs, the rear of the bus.\n" +
+                "·  The game saves at the start of every chapter.\n" +
+                "·  There are three endings. How you finish the manifest matters.\n" +
+                "·  Play with headphones, in the dark.";
+            GUI.Label(new Rect(x, y, colW, h * 0.7f), left, body);
+            GUI.Label(new Rect(x + colW + 60, y, colW, h * 0.7f), right, body);
+            if (GUI.Button(new Rect(w / 2 - 200, h - 110, 400, 60), "Back", sButton)) howToOpen = false;
         }
 
         void DrawSettings(StoryDirector st, float w, float h)
@@ -562,6 +638,8 @@ namespace TLP
             if (GUI.Button(new Rect(x, y, 840, 50), "Invert mouse Y:  " + (s.invertY ? "ON" : "OFF"), sButton)) s.invertY = !s.invertY;
             y += 60;
             if (GUI.Button(new Rect(x, y, 840, 50), "Reduce motion (no head bob / bus sway):  " + (s.reduceMotion ? "ON" : "OFF"), sButton)) s.reduceMotion = !s.reduceMotion;
+            y += 60;
+            if (GUI.Button(new Rect(x, y, 840, 50), "Tutorial tips during the first shift:  " + (s.tutorial ? "ON" : "OFF"), sButton)) s.tutorial = !s.tutorial;
             y += 80;
             if (GUI.Button(new Rect(w / 2 - 200, y, 400, 60), "Back", sButton)) { settingsOpen = false; s.Save(); }
         }

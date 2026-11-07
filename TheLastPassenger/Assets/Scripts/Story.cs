@@ -43,7 +43,7 @@ namespace TLP
         Coroutine main;
 
         // dev-only automation (never active in release builds)
-        public bool bot; public string botEnding = "A"; public string shotDir; int shotIdx;
+        public bool bot, botTutorial, botHowTo; public string botEnding = "A"; public string shotDir; int shotIdx;
 
         void Awake() { I = this; settings = Settings.Load(); AudioListener.volume = settings.volume; }
 
@@ -88,6 +88,7 @@ namespace TLP
         {
             if (ui.gameStarted) { pendingStart = "new"; SceneManager.LoadScene(0); return; }
             data = new SaveData();
+            if (Tutorial.I) Tutorial.I.ResetAll();
             StartRun(1);
         }
 
@@ -291,8 +292,11 @@ namespace TLP
 
         public void OnRemember(ManifestRow row, bool on) { if (!ending) { row.remembered = on; au.Play2D(au.tear, 0.1f, 2.8f); } }
 
+        public bool BellPending => bellAction != null;
+
         void RingBell()
         {
+            if (Tutorial.I) Tutorial.I.bellRings++;
             au.PlayAt(au.bell, bus.bellPoint.position, 0.8f);
             if (bellAction != null) { var a = bellAction; bellAction = null; a(); }
             else if (Time.time > nextGrumble && !ending) { nextGrumble = Time.time + 25f; ui.Say("RAGHAVAN", "Not now, conductor."); }
@@ -444,6 +448,7 @@ namespace TLP
             OfferTicket(P["lakshmi"], () => StartCoroutine(Talk(("LAKSHMI", "Central bus stand, child. My son is waiting for me there."))));
             OfferTicket(bala, () => StartCoroutine(Talk(("BALA", "Uncle... is this the bus that goes over the big bridge?"), ("RAGHAVAN", "Not tonight. Sit down."))));
             yield return Until(() => tickets() == 4 && marked() == 4);
+            Shot("ch1_tickets");
             yield return new WaitUntil(() => !ui.Speaking);
 
             yield return Talk(("RAGHAVAN", "Count properly. Once we leave the depot, I won't turn back."));
@@ -1250,8 +1255,25 @@ namespace TLP
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             bot = true; botEnding = endingLetter; shotDir = shots; timeScale = 3f;
             Debug.Log("[TLP] Bot playthrough, ending " + endingLetter + ", from chapter " + fromChapter);
+            StartCoroutine(BotStart(fromChapter));
+#endif
+        }
+
+        IEnumerator BotStart(int fromChapter)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (botHowTo)
+            {
+                ui.menuOpen = true; ui.howToOpen = true;
+                yield return new WaitForSecondsRealtime(1.5f);
+                Shot("howto");
+                yield return new WaitForSecondsRealtime(0.5f);
+                ui.howToOpen = false;
+            }
             if (fromChapter > 1) JumpTo(fromChapter);
             else { data = new SaveData(); StartRun(1); StartCoroutine(Bot()); }
+#else
+            yield break;
 #endif
         }
 

@@ -191,6 +191,7 @@ namespace TLP
         public int subtitleSize = 1;    // 0 small, 1 medium, 2 large
         public bool invertY;
         public bool reduceMotion;
+        public bool tutorial = true;
 
         public static Settings Load()
         {

@@ -21,6 +21,8 @@ namespace TLP
         float vy, bobT, stepT, sway;
         public float lookOverrideWeight; // cinematic camera control
         public Settings settings;
+        public float lookTravel, moveTravel;   // for the tutorial
+        public int interactions;
 
         void Awake() { I = this; }
 
@@ -43,7 +45,9 @@ namespace TLP
             {
                 float sens = settings != null ? settings.sensitivity : 2f;
                 float my = Input.GetAxisRaw("Mouse Y") * sens * (settings != null && settings.invertY ? -1 : 1);
-                yaw += Input.GetAxisRaw("Mouse X") * sens;
+                float mx = Input.GetAxisRaw("Mouse X") * sens;
+                yaw += mx;
+                lookTravel += Mathf.Abs(mx) + Mathf.Abs(my);
                 pitch = Mathf.Clamp(pitch - my, -80f, 80f);
             }
             transform.rotation = Quaternion.Euler(0, yaw, 0);
@@ -58,6 +62,7 @@ namespace TLP
             }
             if (cc.isGrounded) vy = -1f; else vy -= 9.81f * Time.deltaTime;
             if (cc.enabled) cc.Move((move * walkSpeed + Vector3.up * vy) * Time.deltaTime);
+            moveTravel += move.magnitude * walkSpeed * Time.deltaTime;
 
             // Footsteps / head bob
             bool reduce = settings != null && settings.reduceMotion;
@@ -98,6 +103,7 @@ namespace TLP
                 if (focus && (Input.GetKeyDown(KeyCode.E) || Input.GetMouseButtonDown(0)))
                 {
                     var f = focus;
+                    interactions++;
                     f.onUse?.Invoke();
                 }
             }
