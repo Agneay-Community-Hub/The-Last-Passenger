@@ -21,7 +21,9 @@ namespace TLP
         float vy, bobT, stepT, sway;
         public float lookOverrideWeight; // cinematic camera control
         public Settings settings;
-        public float lookTravel, moveTravel;   // for the tutorial
+        public float lookTravel, moveTravel;
+        public float shakeT;
+        public void Shake(float amount) { shakeT = Mathf.Max(shakeT, amount); }   // for the tutorial
         public int interactions;
         Passenger reflPassenger;
 
@@ -83,8 +85,11 @@ namespace TLP
 
             if (lookOverrideWeight <= 0)
             {
-                cam.transform.localPosition = new Vector3(0, 1.62f + bob, 0);
-                cam.transform.localRotation = Quaternion.Euler(pitch, 0, sway);
+                shakeT = Mathf.Max(0, shakeT - Time.unscaledDeltaTime);
+                float sk = reduce ? shakeT * 0.3f : shakeT;
+                var jitter = new Vector3(Mathf.PerlinNoise(Time.time * 40f, 1) - 0.5f, Mathf.PerlinNoise(Time.time * 40f, 7) - 0.5f, 0) * sk * 0.12f;
+                cam.transform.localPosition = new Vector3(0, 1.62f + bob, 0) + jitter;
+                cam.transform.localRotation = Quaternion.Euler(pitch + jitter.y * 40f, jitter.x * 30f, sway + jitter.x * 40f);
             }
 
             // Mirror glance and manifest

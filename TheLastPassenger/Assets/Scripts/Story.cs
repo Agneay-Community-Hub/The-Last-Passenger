@@ -126,9 +126,11 @@ namespace TLP
             ui.fade = 1; ui.fadeTarget = 0;
             if (start == 1 && settings.tutorial && (!bot || botTutorial)) yield return Training();
             ui.ShowHint(start == 1 ? 25 : 12);
+            StartCoroutine(AmbientDread());
             for (int c = start; c <= 7 && !ending; c++)
             {
                 F.chapter = c;
+                ui.dread = 0.2f + 0.08f * c;
                 Save();
                 Shot("ch" + c + "_start");
                 switch (c)
@@ -621,6 +623,193 @@ namespace TLP
             yield return mur.BoardFront();
         }
 
+        // ================================================================== SCARES
+
+        /// <summary>Stinger, red flash, camera shake and a heartbeat spike.</summary>
+        void Scare(float s)
+        {
+            au.PlayAt(au.stinger, pl.cam.transform.position, Mathf.Clamp01(0.45f + s * 0.55f), 1f, 0f);
+            ui.Flash(new Color(0.55f, 0f, 0f), 0.35f * s);
+            pl.Shake(0.25f + 0.6f * s);
+            au.SetHeart(Mathf.Max(0.35f, s * 0.9f));
+            StartCoroutine(Delayed(5f, () => au.SetHeart(0.1f)));
+            Debug.Log("[TLP] Scare " + s.ToString("0.0"));
+            if (bot) StartCoroutine(Delayed(0.12f, () => Shot("scare_ch" + F.chapter)));
+        }
+
+        /// <summary>Puts a figure right in front of the camera for a moment.</summary>
+        IEnumerator FaceJump(Passenger who, float seconds, float strength = 1f)
+        {
+            int oldLayer = who.gameObject.layer;
+            B.Layer(who.gameObject, 0);
+            var cam = pl.cam.transform;
+            var f = cam.forward; f.y = 0; f.Normalize();
+            var pos = cam.position + f * 0.5f;
+            pos.y = cam.position.y - 1.58f * who.transform.localScale.y;
+            who.PlaceAt(pos, Mathf.Atan2(-f.x, -f.z) * Mathf.Rad2Deg, PState.Standing);
+            who.LookAt(cam.position);
+            Scare(strength);
+            yield return new WaitForSeconds(seconds);
+            who.Hide();
+            who.LookForward();
+            B.Layer(who.gameObject, oldLayer);
+        }
+
+        /// <summary>Ch1: the knocking turns violent as the player gets close to the rear door.</summary>
+        IEnumerator RearDoorViolence(Func<bool> stop)
+        {
+            var door = new Vector3(-1.2f, 1.1f, -2.6f);
+            float t = 0;
+            while (!stop() && Vector3.Distance(pl.transform.position, door) > 3.2f && t < 30f) { t += Time.deltaTime; yield return null; }
+            if (stop()) yield break;
+            for (int i = 0; i < 4; i++)
+            {
+                au.PlayAt(au.rattleHit, door, 1f, UnityEngine.Random.Range(0.85f, 1.05f));
+                var leaf = bus.rearDoor;
+                var basePos = leaf.localPosition;
+                for (float s = 0; s < 0.18f; s += Time.deltaTime) { leaf.localPosition = basePos + new Vector3(UnityEngine.Random.Range(-0.03f, 0.03f), 0, 0); yield return null; }
+                leaf.localPosition = basePos;
+                if (i == 1) Scare(0.5f);
+                yield return new WaitForSeconds(0.22f);
+            }
+            au.PlayAt(au.scrape, door, 0.7f);
+        }
+
+        /// <summary>Ch3: a wet face presses against the window of the moving bus, right beside you.</summary>
+        IEnumerator WindowFace()
+        {
+            float t = 0;
+            while (t < 25f && Vector3.Dot(pl.cam.transform.forward, Vector3.right) < 0.55f) { t += Time.deltaTime; yield return null; }
+            yield return new WaitForSeconds(0.4f);
+            var face = PersonBuilder.Copy(P["meena"], transform, "window_face");
+            Destroy(face.GetComponent<Collider>()); face.interact.active = false;
+            float z = Mathf.Clamp(pl.transform.position.z, -4.5f, 3.5f);
+            face.PlaceAt(new Vector3(1.42f, 0.05f, z), -90, PState.Standing);
+            face.LookAt(pl.cam.transform.position);
+            au.PlayAt(au.rattleHit, new Vector3(1.25f, 1.5f, z), 1f, 1.3f);
+            Scare(0.75f);
+            yield return new WaitForSeconds(1.1f);
+            au.PlayAt(au.scrape, new Vector3(1.3f, 1.4f, z), 0.6f, 1.4f);
+            Destroy(face.gameObject);
+            ui.Say("", "There was a face on the glass. The bus is doing forty.");
+        }
+
+        /// <summary>Ch6: the silent man walks down the aisle only while nobody is looking at him.</summary>
+        IEnumerator Stalker(Func<bool> done)
+        {
+            var man = silentMan;
+            B.Layer(man.gameObject, 0);
+            var rear = new Vector3(0, 0, -4.6f);
+            man.PlaceAt(rear, 0, PState.Standing);
+            int caught = 0; float stepT = 0, breathT = 0;
+            ui.dread = 0.85f;
+            while (!done() && !ending)
+            {
+                var head = man.head ? man.head.position : man.transform.position + Vector3.up * 1.6f;
+                var pos = man.transform.position;
+                var toPl = pl.transform.position - pos; toPl.y = 0;
+                float dist = toPl.magnitude;
+                bool watched = !pl.mirrorHeld && !ui.Modal && pl.LookingAt(head, 26f);
+                if (!watched && dist > 0.75f)
+                {
+                    Vector3 target;
+                    if (Mathf.Abs(pos.z - pl.transform.position.z) > 0.7f) target = new Vector3(0, 0, pl.transform.position.z);
+                    else target = new Vector3(pl.transform.position.x, 0, pl.transform.position.z);
+                    var d = target - pos; d.y = 0;
+                    if (d.sqrMagnitude > 0.0004f)
+                    {
+                        man.transform.position = pos + d.normalized * Mathf.Min(d.magnitude, 0.8f * Time.deltaTime);
+                        man.transform.rotation = Quaternion.RotateTowards(man.transform.rotation, Quaternion.LookRotation(d.normalized), 300 * Time.deltaTime);
+                    }
+                    man.state = PState.Walking;
+                    stepT += Time.deltaTime;
+                    if (stepT > 0.6f) { stepT = 0; au.PlayAt(au.step, man.transform.position, 0.55f, 0.75f); }
+                }
+                else
+                {
+                    man.state = PState.Standing;
+                    man.FaceFlat(pl.transform.position);
+                    man.LookAt(pl.cam.transform.position);
+                }
+                au.SetHeart(Mathf.Clamp01(1.25f - dist / 6f));
+                breathT += Time.deltaTime;
+                if (dist < 2.5f && breathT > 3f) { breathT = 0; au.PlayAt(au.breath, head, 0.8f); }
+                if (dist < 0.75f)
+                {
+                    caught++;
+                    Debug.Log("[TLP] Stalker caught the player (" + caught + ")");
+                    var cam = pl.cam.transform;
+                    var f = cam.forward; f.y = 0; f.Normalize();
+                    man.PlaceAt(new Vector3(cam.position.x + f.x * 0.45f, 0, cam.position.z + f.z * 0.45f), Mathf.Atan2(-f.x, -f.z) * Mathf.Rad2Deg, PState.Standing);
+                    man.LookAt(cam.position);
+                    Scare(1f);
+                    yield return new WaitForSeconds(0.45f);
+                    bus.SetAllLights(false);
+                    man.PlaceAt(rear, 0, PState.Standing);
+                    yield return new WaitForSeconds(0.9f);
+                    foreach (var p in P.Values) if (p.named) bus.SetLight(p.lightIndex, true);
+                    ui.Say("", caught == 1 ? "He is back on the last bench. Keep your eyes on him." : "Back on the last bench. Again.");
+                    yield return new WaitForSeconds(1.5f);
+                }
+                yield return null;
+            }
+            man.Hide();
+            man.LookForward();
+            B.Layer(man.gameObject, B.MirrorLayer);
+            au.SetHeart(0.1f);
+            ui.dread = 0.6f;
+        }
+
+        /// <summary>Small unexplained things between the scripted events, so the bus never feels safe.</summary>
+        IEnumerator AmbientDread()
+        {
+            var used = new HashSet<int>();
+            while (!ending)
+            {
+                yield return new WaitForSeconds(UnityEngine.Random.Range(30f, 55f));
+                if (inTraining || ending || F.chapter < 2 || F.chapter > 6 || ui.cinematic || ui.Speaking) continue;
+                if (used.Count >= 6) used.Clear();
+                int k; int tries = 0;
+                do { k = UnityEngine.Random.Range(0, 6); tries++; } while (used.Contains(k) && tries < 30);
+                used.Add(k);
+                var behind = pl.transform.position - pl.transform.forward * 0.6f + Vector3.up * 1.55f;
+                switch (k)
+                {
+                    case 0: au.PlayAt(au.breath, behind, 0.85f); break;
+                    case 1: au.PlayAt(au.whisper, behind, 0.75f); break;
+                    case 2: StartCoroutine(FootstepsBehind()); break;
+                    case 3:
+                        int li = 0; float best = 999;
+                        for (int i = 0; i < bus.cabinLights.Length; i++)
+                        { float dz = Mathf.Abs(bus.cabinLights[i].transform.position.z - pl.transform.position.z); if (dz < best) { best = dz; li = i; } }
+                        if (bus.cabinLights[li].enabled) StartCoroutine(bus.Flicker(li, 1.5f));
+                        au.PlayAt(au.scrape, new Vector3(1.3f, 1.6f, pl.transform.position.z - 1f), 0.4f, 0.8f);
+                        break;
+                    case 4:
+                        var aboard = P.Values.Where(p => p.Aboard && p.id != "murugan" && p.gameObject.activeInHierarchy).ToList();
+                        if (aboard.Count > 0)
+                        {
+                            var p = aboard[UnityEngine.Random.Range(0, aboard.Count)];
+                            p.LookAt(pl.cam.transform.position);
+                            StartCoroutine(Delayed(8f, () => p.LookForward()));
+                        }
+                        break;
+                    case 5: au.PlayAt(au.printer, bus.Prop("TicketMachine").transform.position, 0.6f, 0.9f); break;
+                }
+                Debug.Log("[TLP] Ambient dread event " + k);
+            }
+        }
+
+        IEnumerator FootstepsBehind()
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                var pos = pl.transform.position - pl.transform.forward * (3.2f - i * 0.75f);
+                au.PlayAt(au.step, pos, 0.65f, 0.8f);
+                yield return new WaitForSeconds(0.6f);
+            }
+        }
+
         // ================================================================== CHAPTER 1
 
         IEnumerator Chapter1()
@@ -687,6 +876,7 @@ namespace TLP
                 bus.ShowObj("RearWet", true);
                 StartCoroutine(RearDoorOpen(() => inspected = true));
             });
+            StartCoroutine(RearDoorViolence(() => inspected));
             Obj("Something knocked on the closed rear door. Walk down the aisle to the rear door (left side, behind the last left-hand seats before the back), look at it and press E.");
             yield return Until(() => inspected, null);
             F.wetHandle = true;
@@ -823,14 +1013,32 @@ namespace TLP
         {
             ghostMeena.PlaceSeated();
             float seenT = 0, idle = 0;
+            bool turned = false;
             while (seenT < 4.5f && idle < 45f)
             {
-                if (pl.mirrorHeld) { seenT += Time.deltaTime; F.seenMirrorMeena = true; }
-                else if (F.seenMirrorMeena) seenT += Time.deltaTime;
+                if (pl.mirrorHeld)
+                {
+                    seenT += Time.deltaTime; F.seenMirrorMeena = true;
+                    if (!turned && seenT > 1.2f)
+                    {
+                        // her reflection turns its head and looks straight back at you
+                        turned = true;
+                        ghostMeena.LookAt(bus.mirrorCam.transform.position);
+                        au.PlayAt(au.whisper, pl.cam.transform.position + Vector3.up * 0.1f, 0.8f, 0.9f);
+                    }
+                }
+                else if (F.seenMirrorMeena) { if (turned) break; seenT += Time.deltaTime; }
                 else idle += Time.deltaTime;
                 yield return null;
             }
             ghostMeena.Hide();
+            ghostMeena.LookForward();
+            if (turned)
+            {
+                au.PlayAt(au.breath, pl.cam.transform.position - pl.transform.forward * 0.4f, 1f);
+                Scare(0.45f);
+                ui.Say("", "The moment you look away from the mirror, something breathes against the back of your neck.");
+            }
         }
 
         // ================================================================== CHAPTER 3
@@ -857,6 +1065,7 @@ namespace TLP
             Obj("Find the ringing phone.");
             yield return Until(() => answered);
             bus.ShowObj("Phone", false);
+            StartCoroutine(WindowFace());
             yield return Talk(("KAVIN", "That's my mother. She was at home. She can't be here."),
                               ("LAKSHMI", "Child, you were going home. We all were."));
             yield return new WaitForSeconds(1f);
@@ -982,11 +1191,30 @@ namespace TLP
             au.SetHum(0.02f); au.SetRain(0.2f);
             yield return Talk(("RAGHAVAN", "Don't open the door."));
             Obj("");
-            yield return new WaitForSeconds(5f);
+            yield return new WaitForSeconds(2.5f);
+            // every face at the curb turns to you at once
+            foreach (var f in figures) if (f) f.LookAt(pl.cam.transform.position);
+            au.PlayAt(au.scrape, new Vector3(-1.3f, 1.2f, 2f), 0.8f, 0.7f);
+            ui.dread = 0.75f;
+            yield return new WaitForSeconds(3f);
             Shot("ch4_curb");
-            foreach (var l in Enumerable.Range(0, 6)) StartCoroutine(bus.Flicker(l, 1.4f));
-            yield return new WaitForSeconds(0.7f);
+            bus.SetAllLights(false);
+            au.PlayAt(au.thump, new Vector3(0, 2f, 0), 0.8f);
+            yield return new WaitForSeconds(1.2f);
             foreach (var f in figures) if (f) f.gameObject.SetActive(false);
+            // ...and when the lights come back, one of them is inside, at the door.
+            var inside = MakeDouble(P["bala"], transform);
+            inside.PlaceAt(Passenger.FrontDoor + new Vector3(0.2f, 0, -0.3f), 0, PState.Standing);
+            inside.FaceFlat(pl.transform.position);
+            inside.LookAt(pl.cam.transform.position);
+            bus.SetAllLights(true);
+            Scare(0.85f);
+            yield return new WaitForSeconds(1.1f);
+            bus.SetAllLights(false);
+            yield return new WaitForSeconds(0.5f);
+            Destroy(inside.gameObject);
+            bus.SetAllLights(true);
+            ui.dread = 0.55f;
             yield return new WaitForSeconds(1f);
             au.SetHum(0.12f); au.SetRain(0.45f);
             ui.Say("", "Everyone who was standing at the curb is still sitting inside. Every one of them.");
@@ -1096,6 +1324,7 @@ namespace TLP
             float startYaw = pl.yaw, t = 0;
             yield return Until(() => { t += Time.deltaTime; return Mathf.Abs(Mathf.DeltaAngle(startYaw, pl.yaw)) > 110f || t > 9f; });
             silentMan.Hide();
+            yield return FaceJump(silentMan, 0.4f, 1f); // you turned around. He is right there.
             au.SetHeart(0.1f);
             ui.Say("", "Nobody. Only the ticket printer, still warm, and one blank ticket on the floor.");
             yield return new WaitForSeconds(4f);
@@ -1170,7 +1399,9 @@ namespace TLP
                     }, lines[id]));
                 });
             }
-            Obj(() => "The lights went out. Go to each passenger in the dark and say their name (" + PassengerIds.Count(i => P[i].named) + "/5).");
+            yield return Talk(("LAKSHMI", "Don't take your eyes off him, child. He only walks when nobody is counting him."));
+            StartCoroutine(Stalker(() => PassengerIds.All(i => P[i].named)));
+            Obj(() => "The lights went out. Say each passenger's name (" + PassengerIds.Count(i => P[i].named) + "/5). The man from the last bench moves only while you are NOT looking at him.");
             yield return Until(() => PassengerIds.All(i => P[i].named));
             yield return Talk(("RAGHAVAN", "There were six passengers. And one conductor. I wrote down only six."));
 

@@ -162,6 +162,7 @@ namespace TLP
         {
             float dt = Time.unscaledDeltaTime;
             fade = Mathf.MoveTowards(fade, fadeTarget, dt * fadeSpeed);
+            flash = Mathf.MoveTowards(flash, 0, dt * 2.2f);
             cardAlpha = Mathf.MoveTowards(cardAlpha, cardTarget, dt * 0.7f);
             if (toastT > 0) toastT -= dt;
             if (hintT > 0) hintT -= dt;
@@ -333,6 +334,17 @@ namespace TLP
                 if (docOpen) DrawDoc(w, h);
             }
 
+            // dread: vignette that darkens as the night goes on, and scare flashes
+            if (gameStarted && !menuOpen)
+            {
+                if (!tVignette) tVignette = MakeVignette();
+                var c0 = GUI.color;
+                GUI.color = new Color(1, 1, 1, Mathf.Clamp01(dread));
+                GUI.DrawTexture(new Rect(0, 0, w, h), tVignette);
+                if (flash > 0.001f) { GUI.color = new Color(flashColor.r, flashColor.g, flashColor.b, flash); GUI.DrawTexture(new Rect(0, 0, w, h), tWhite); }
+                GUI.color = c0;
+            }
+
             // fade & card
             if (fade > 0.001f) { var c = GUI.color; GUI.color = new Color(1, 1, 1, fade); GUI.DrawTexture(new Rect(0, 0, w, h), tBlack); GUI.color = c; }
             if (cardAlpha > 0.001f && !string.IsNullOrEmpty(card))
@@ -349,6 +361,25 @@ namespace TLP
         }
 
         GUIStyle Shadowed(GUIStyle s) => s;
+
+        public float dread = 0.3f, flash; public Color flashColor = Color.white;
+        Texture2D tVignette;
+        public void Flash(Color c, float amount) { flashColor = c; flash = Mathf.Max(flash, amount); }
+
+        static Texture2D MakeVignette()
+        {
+            const int n = 128;
+            var t = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float dx = (x - n / 2f) / (n / 2f), dy = (y - n / 2f) / (n / 2f);
+                    float d = Mathf.Sqrt(dx * dx * 0.8f + dy * dy);
+                    t.SetPixel(x, y, new Color(0, 0, 0, Mathf.Clamp01((d - 0.45f) * 1.6f)));
+                }
+            t.Apply();
+            return t;
+        }
 
         static string SpeakerColor(string sp)
         {

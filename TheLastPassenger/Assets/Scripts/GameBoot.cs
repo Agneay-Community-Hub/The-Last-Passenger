@@ -111,6 +111,10 @@ namespace TLP
             Object.Destroy(silent.GetComponent<Collider>());
             PersonBuilder.Attach(silent, HumanBodyBones.RightHand,
                 B.Quad(silent.body, "BlankTicket", new Vector3(0.27f, 0.72f, 0.12f), new Vector3(0.06f, 0.1f, 1f), "Paper", new Vector3(0, 180, 0)), new Vector3(0, -0.03f, 0.05f));
+            // Faint glowing eyes so he can be seen in the dark.
+            foreach (var ex in new[] { -0.035f, 0.035f })
+                PersonBuilder.Attach(silent, HumanBodyBones.Head,
+                    B.Sph(silent.body, "Eye", new Vector3(ex, 1.62f, 0.1f), new Vector3(0.022f, 0.012f, 0.012f), "Headlight"), new Vector3(ex, 0.04f, 0.1f));
             B.Layer(silent.gameObject, B.MirrorLayer); story.silentMan = silent; silent.Hide();
 
             var dbl = PersonBuilder.Make(peopleRoot, "conductor_double", "", new PersonBuilder.Recipe { clothes = "Khaki", legs = "Khaki", skin = "Skin", hair = "Hair", model = "Casual2", recolor = khakiConductor });

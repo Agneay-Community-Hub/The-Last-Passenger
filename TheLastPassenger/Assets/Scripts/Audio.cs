@@ -14,7 +14,7 @@ namespace TLP
         const int SR = 22050;
 
         public AudioClip engine, rain, hum, rattle, drone, bell, printer, knock, door, brake, indicator,
-                         phone, whisper, step, speaker, thump, tear, heartbeat, clink, voiceMurmur;
+                         phone, whisper, step, speaker, thump, tear, heartbeat, clink, voiceMurmur, stinger, breath, scrape, rattleHit;
 
         AudioSource engineSrc, rainSrc, humSrc, rattleSrc, droneSrc, heartSrc;
         readonly List<AudioSource> pool = new List<AudioSource>();
@@ -249,6 +249,39 @@ namespace TLP
 
             // Indistinct crowd murmur (passengers you cannot see).
             float m1 = 0, m2 = 0, menv = 0;
+            // Horror stinger: a dissonant low cluster hit with a screeching overtone.
+            stinger = Make("stinger", 2.2f, t =>
+            {
+                float env = Mathf.Min(1, t * 200) * Mathf.Exp(-t * 1.6f);
+                float saw(float hz) => 2f * ((t * hz) % 1f) - 1f;
+                float low = saw(55f) + saw(58.3f) + 0.7f * saw(77.8f) + 0.5f * saw(116.5f);
+                float screech = Mathf.Sin(2f * Mathf.PI * (1750f * t + 40f * Mathf.Sin(2f * Mathf.PI * 7f * t))) * Mathf.Exp(-t * 2.5f) * 0.6f;
+                float hit = N() * Mathf.Exp(-t * 18f);
+                return (low * 0.35f + screech + hit) * env;
+            });
+
+            // Close, slow breathing (inhale / exhale).
+            float bl = 0, bl2 = 0;
+            breath = Make("breath", 3.2f, t =>
+            {
+                bl += (N() - bl) * 0.25f; bl2 += (bl - bl2) * 0.3f;
+                float ph = (t / 3.2f) % 1f;
+                float env = ph < 0.4f ? Mathf.Sin(ph / 0.4f * Mathf.PI) * 0.6f : Mathf.Sin((ph - 0.4f) / 0.6f * Mathf.PI);
+                return (bl - bl2) * env * env;
+            }, true);
+
+            // Metal scraping along the bus.
+            float sc = 0;
+            scrape = Make("scrape", 1.6f, t =>
+            {
+                sc += (N() - sc) * 0.7f;
+                float res = Mathf.Sin(2f * Mathf.PI * (820f + 120f * Mathf.Sin(t * 9f)) * t);
+                return (sc * 0.5f + res * 0.4f) * Mathf.Min(1, t * 6) * Mathf.Exp(-t * 1.2f) * (0.6f + 0.4f * Mathf.PerlinNoise(t * 30f, 0));
+            });
+
+            // Door/panel slam.
+            rattleHit = Make("slam", 0.9f, t => (Sin(65, t) * Mathf.Exp(-t * 8f) + N() * Mathf.Exp(-t * 25f) + 0.4f * Sin(310, t) * Mathf.Exp(-t * 14f)));
+
             voiceMurmur = Make("murmur", 4f, t =>
             {
                 m1 += (N() - m1) * 0.08f;
