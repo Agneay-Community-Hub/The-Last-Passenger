@@ -16,3 +16,6 @@ TheLastPassenger/.idea/
 Builds/
 *.log
 *.zip
+
+# Raw downloads (only the files the game uses are copied into Assets/ThirdParty)
+Third  Party/

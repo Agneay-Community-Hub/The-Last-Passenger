@@ -23,6 +23,7 @@ namespace TLP
         public Settings settings;
         public float lookTravel, moveTravel;   // for the tutorial
         public int interactions;
+        Passenger reflPassenger;
 
         void Awake() { I = this; }
 
@@ -112,6 +113,8 @@ namespace TLP
             {
                 reflection.position = transform.position;
                 reflection.rotation = Quaternion.Euler(0, yaw, 0);
+                if (!reflPassenger) reflPassenger = reflection.GetComponent<Passenger>();
+                if (reflPassenger) reflPassenger.state = moving > 0.1f ? PState.Walking : PState.Standing;
             }
         }
 

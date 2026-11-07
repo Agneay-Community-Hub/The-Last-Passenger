@@ -31,6 +31,25 @@ namespace TLP
         }
     }
 
+    /// <summary>Imported models, the character animator and extra fonts, registered by the editor builder.</summary>
+    public class GameAssets : MonoBehaviour
+    {
+        public GameObject[] models;
+        public RuntimeAnimatorController animator;
+        public Font tamil;
+        static GameAssets inst;
+        static GameAssets I { get { if (!inst) inst = Object.FindAnyObjectByType<GameAssets>(); return inst; } }
+        void Awake() { inst = this; }
+        public static GameObject Model(string n)
+        {
+            if (!I || I.models == null) return null;
+            foreach (var m in I.models) if (m && m.name == n) return m;
+            return null;
+        }
+        public static RuntimeAnimatorController Animator => I ? I.animator : null;
+        public static Font Tamil => I ? I.tamil : null;
+    }
+
     /// <summary>Anything the player can look at and press E on.</summary>
     public class Interactable : MonoBehaviour
     {
@@ -72,11 +91,65 @@ namespace TLP
             }
             var r = g.GetComponent<Renderer>();
             if (mat != null) r.sharedMaterial = Mats.Get(mat);
+            // Textured boxes get UVs in metres so materials tile at real-world scale instead of stretching.
+            if (t == PrimitiveType.Cube && r.sharedMaterial && r.sharedMaterial.mainTexture)
+                g.GetComponent<MeshFilter>().sharedMesh = BoxMesh(g.transform.lossyScale);
             r.shadowCastingMode = ShadowCastingMode.Off;
             r.receiveShadows = false;
             r.lightProbeUsage = LightProbeUsage.Off;
             r.reflectionProbeUsage = ReflectionProbeUsage.Off;
             return g;
+        }
+
+        static Mesh unitCube;
+        static readonly Dictionary<Vector3Int, Mesh> boxMeshes = new Dictionary<Vector3Int, Mesh>();
+
+        /// <summary>A cube whose UVs are measured in metres for the given scale (cached by size, 5 cm steps).</summary>
+        public static Mesh BoxMesh(Vector3 scale)
+        {
+            scale = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+            var key = new Vector3Int(Mathf.RoundToInt(scale.x * 20), Mathf.RoundToInt(scale.y * 20), Mathf.RoundToInt(scale.z * 20));
+            if (boxMeshes.TryGetValue(key, out var m) && m) return m;
+            if (!unitCube)
+            {
+                var tmp = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                unitCube = tmp.GetComponent<MeshFilter>().sharedMesh;
+                Object.DestroyImmediate(tmp);
+            }
+            m = Object.Instantiate(unitCube);
+            m.name = "Box" + key;
+            var v = m.vertices; var n = m.normals; var uv = new Vector2[v.Length];
+            for (int i = 0; i < v.Length; i++)
+            {
+                var w = Vector3.Scale(v[i], scale);
+                var an = new Vector3(Mathf.Abs(n[i].x), Mathf.Abs(n[i].y), Mathf.Abs(n[i].z));
+                if (an.x > 0.5f) uv[i] = new Vector2(w.z * Mathf.Sign(n[i].x), w.y);
+                else if (an.y > 0.5f) uv[i] = new Vector2(w.x, w.z * Mathf.Sign(n[i].y));
+                else uv[i] = new Vector2(-w.x * Mathf.Sign(n[i].z), w.y);
+            }
+            m.uv = uv;
+            m.RecalculateTangents();
+            boxMeshes[key] = m;
+            return m;
+        }
+
+        /// <summary>Places an imported model so its bounds sit centred on 'pos' with the bottom on the ground.</summary>
+        public static GameObject Model(Transform parent, string model, Vector3 pos, float scale, float yaw = 0)
+        {
+            var prefab = GameAssets.Model(model);
+            var pivot = Empty(parent, "M_" + model, pos, new Vector3(0, yaw, 0));
+            if (!prefab) return pivot;
+            var g = Object.Instantiate(prefab, pivot.transform, false);
+            g.transform.localScale = Vector3.one * scale;
+            var rends = g.GetComponentsInChildren<Renderer>();
+            if (rends.Length > 0)
+            {
+                var b = rends[0].bounds;
+                foreach (var r in rends) { b.Encapsulate(r.bounds); r.shadowCastingMode = ShadowCastingMode.Off; }
+                var localCenter = pivot.transform.InverseTransformPoint(new Vector3(b.center.x, b.min.y, b.center.z));
+                g.transform.localPosition -= localCenter;
+            }
+            return pivot;
         }
 
         public static GameObject Box(Transform p, string n, Vector3 pos, Vector3 s, string mat, bool col = false, Vector3 e = default)

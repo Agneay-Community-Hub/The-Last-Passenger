@@ -49,6 +49,11 @@ namespace TLP
 
         public void Init(BusSystems b, RouteManager r, UIManager u, PlayerController p, AudioDirector a)
         {
+            UIManager.OnLine = (speaker, dur) =>
+            {
+                if (speaker == "RAGHAVAN") { if (driver) driver.Talk(dur); return; }
+                foreach (var ps in P.Values) if (ps.displayName.ToUpper() == speaker && ps.gameObject.activeInHierarchy) ps.Talk(dur);
+            };
             bus = b; route = r; ui = u; pl = p; au = a;
             pl.settings = settings;
             foreach (var pp in P.Values.Concat(new[] { driver }))
@@ -209,7 +214,7 @@ namespace TLP
         void SpawnCrowd()
         {
             int i = crowd.Count;
-            var p = PersonBuilder.Make(transform, "crowd" + i, "", "Ghost", "Ghost", "Ghost", "Ghost", 1f, false);
+            var p = PersonBuilder.Make(transform, "crowd" + i, "", new PersonBuilder.Recipe { clothes = "Ghost", legs = "Ghost", skin = "Ghost", hair = "Ghost", model = "Suit", recolor = new Dictionary<string, string> { ["*"] = "Ghost" } });
             Destroy(p.GetComponent<Collider>());
             p.interact.active = false;
             float z = -4.3f + (i % 10) * 0.8f;
@@ -471,7 +476,7 @@ namespace TLP
                 bus.ShowObj("RearWet", true);
                 StartCoroutine(RearDoorOpen(() => inspected = true));
             });
-            Obj("Something knocked on the closed rear door. Inspect it.");
+            Obj("Something knocked on the closed rear door. Walk down the aisle to the rear door (left side, behind the last left-hand seats before the back), look at it and press E.");
             yield return Until(() => inspected, null);
             F.wetHandle = true;
 
@@ -781,11 +786,7 @@ namespace TLP
 
         Passenger MakeDouble(Passenger src, Transform parent)
         {
-            string clothes = src.body.Find("Torso").GetComponent<Renderer>().sharedMaterial.name;
-            string legs = src.body.Find("LegL").GetComponent<Renderer>().sharedMaterial.name;
-            string skin = src.head.Find("Face").GetComponent<Renderer>().sharedMaterial.name;
-            string hair = src.head.Find("Hair").GetComponent<Renderer>().sharedMaterial.name;
-            var d = PersonBuilder.Make(parent, src.id + "_double", src.displayName, clothes, legs, skin, hair, src.transform.localScale.x, src.child);
+            var d = PersonBuilder.Copy(src, parent, src.id + "_double");
             Destroy(d.GetComponent<Collider>());
             d.interact.active = false;
             return d;
@@ -988,13 +989,14 @@ namespace TLP
             var oldParent = cam.parent;
             pl.lookOverrideWeight = 1;
             cam.SetParent(null, true);
-            cam.position = new Vector3(-6.0f, 1.25f, 6.6f);
+            cam.position = new Vector3(-3.9f, 1.4f, 6.3f);
             cam.LookAt(new Vector3(-1.0f, 1.05f, 3.9f));
             ui.fadeTarget = 0;
             yield return new WaitForSeconds(2.2f);
             Shot("ch7_outside");
             // the silhouette turns a beat late
-            for (float t = 0; t < 1.4f; t += Time.deltaTime) { conductorDouble.head.localRotation = Quaternion.Slerp(Quaternion.identity, Quaternion.Euler(0, -75, 0), t / 1.4f); yield return null; }
+            if (conductorDouble.anim) { conductorDouble.LookAt(cam.position); yield return new WaitForSeconds(1.4f); }
+            else for (float t = 0; t < 1.4f; t += Time.deltaTime) { conductorDouble.head.localRotation = Quaternion.Slerp(Quaternion.identity, Quaternion.Euler(0, -75, 0), t / 1.4f); yield return null; }
             yield return new WaitForSeconds(2f);
             ui.fadeTarget = 1;
             yield return new WaitForSeconds(0.6f);

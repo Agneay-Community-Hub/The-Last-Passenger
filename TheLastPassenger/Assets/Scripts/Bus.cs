@@ -10,14 +10,17 @@ namespace TLP
     public class Passenger : MonoBehaviour
     {
         public string id, displayName, destination, seatLabel;
-        public bool child;
+        public bool child, isDriver;
         public int lightIndex = -1;
         public Vector3 seatPos;
         public Transform body, head;
+        public Animator anim;
+        public Vector3 sitOffset = new Vector3(0, -0.27f, 0);
         public Interactable interact;
         public PState state = PState.Hidden;
         public bool ticketed, needsTicket;
         public float walkSpeed = 1.15f;
+        public PersonBuilder.Recipe recipe;
 
         public static readonly Vector3 FrontOutside = new Vector3(-2.6f, -0.15f, 4.6f);
         public static readonly Vector3 FrontDoor = new Vector3(-0.95f, 0f, 4.6f);
@@ -29,11 +32,42 @@ namespace TLP
         public bool leaving, named;
         public bool Aboard => !leaving && (state == PState.Seated || state == PState.Standing || state == PState.Walking);
 
+        Vector3? lookTarget; Vector3 lastLook; float lookW; float talkUntil;
+
         public void Hide() { state = PState.Hidden; leaving = false; gameObject.SetActive(false); }
 
         public void Sit(bool s)
         {
-            if (body) body.localPosition = new Vector3(0, s ? -0.27f : 0f, 0);
+            if (body) body.localPosition = s ? sitOffset : Vector3.zero;
+        }
+
+        /// <summary>Plays the talking animation for a few seconds.</summary>
+        public void Talk(float seconds = 3f) { talkUntil = Time.time + seconds; }
+
+        void Update()
+        {
+            if (!anim) return;
+            int pose;
+            bool talking = Time.time < talkUntil;
+            if (state == PState.Walking) pose = 1;
+            else if (state == PState.Seated) pose = isDriver ? 5 : talking ? 3 : 2;
+            else pose = talking ? 4 : 0;
+            anim.SetInteger("Pose", pose);
+        }
+
+        void LateUpdate()
+        {
+            if (!anim || !head) return;
+            lookW = Mathf.MoveTowards(lookW, lookTarget.HasValue ? 1f : 0f, Time.deltaTime * 2.5f);
+            if (lookTarget.HasValue) lastLook = lookTarget.Value;
+            if (lookW <= 0.001f) return;
+            var dir = lastLook - head.position;
+            dir.y *= 0.6f;
+            if (dir.sqrMagnitude < 0.01f) return;
+            var delta = Quaternion.FromToRotation(transform.forward, dir.normalized);
+            float ang = Quaternion.Angle(Quaternion.identity, delta);
+            if (ang > 75f) delta = Quaternion.Slerp(Quaternion.identity, delta, 75f / ang);
+            head.rotation = Quaternion.Slerp(Quaternion.identity, delta, lookW) * head.rotation;
         }
 
         public void PlaceSeated()
@@ -57,6 +91,7 @@ namespace TLP
         public void LookAt(Vector3 world)
         {
             if (!head) return;
+            if (anim) { lookTarget = world; return; }
             var d = world - head.position;
             d.y *= 0.5f;
             if (d.sqrMagnitude < 0.01f) return;
@@ -67,7 +102,11 @@ namespace TLP
             head.localRotation = Quaternion.Euler(Mathf.Clamp(Mathf.DeltaAngle(0, e.x), -20, 20), yaw, 0);
         }
 
-        public void LookForward() { if (head) head.localRotation = Quaternion.identity; }
+        public void LookForward()
+        {
+            lookTarget = null;
+            if (head && !anim) head.localRotation = Quaternion.identity;
+        }
 
         public void FaceFlat(Vector3 world)
         {
@@ -95,7 +134,7 @@ namespace TLP
                     transform.position = pos + move + new Vector3(0, yStep, 0);
                     var want = Quaternion.LookRotation(flat.normalized);
                     transform.rotation = Quaternion.RotateTowards(transform.rotation, want, 360 * Time.deltaTime);
-                    if (body) body.localPosition = new Vector3(0, Mathf.Abs(Mathf.Sin(Time.time * 7f)) * 0.025f, 0);
+                    if (body && !anim) body.localPosition = new Vector3(0, Mathf.Abs(Mathf.Sin(Time.time * 7f)) * 0.025f, 0);
                     stepT += Time.deltaTime;
                     if (stepT > 0.5f)
                     {
@@ -136,29 +175,78 @@ namespace TLP
 
     public static class PersonBuilder
     {
-        /// <summary>Greybox human: legs, torso, arms, head, hair and eyes. Root sits on the floor.</summary>
+        /// <summary>Everything needed to build (or copy) a person.</summary>
+        public class Recipe
+        {
+            public string clothes, legs, skin, hair;
+            public float scale = 1f;
+            public bool child;
+            public string model;                       // Quaternius character, or null for the greybox body
+            public Dictionary<string, string> recolor; // model material name -> our material ("*" = every slot)
+        }
+
+        // Seated pose correction for the animated characters (hips onto the seat cushion).
+        public static Vector3 ModelSitOffset = new Vector3(0, 0.0f, -0.12f);
+
         public static Passenger Make(Transform parent, string id, string displayName, string clothes, string legsMat, string skin, string hair, float scale, bool child)
+            => Make(parent, id, displayName, new Recipe { clothes = clothes, legs = legsMat, skin = skin, hair = hair, scale = scale, child = child });
+
+        public static Passenger Copy(Passenger src, Transform parent, string id) => Make(parent, id, src.displayName, src.recipe);
+
+        public static Passenger Make(Transform parent, string id, string displayName, Recipe r)
         {
             var root = B.Empty(parent, "P_" + id, Vector3.zero);
-            root.transform.localScale = Vector3.one * scale;
+            root.transform.localScale = Vector3.one * r.scale;
             var p = root.AddComponent<Passenger>();
-            p.id = id; p.displayName = displayName; p.child = child;
+            p.id = id; p.displayName = displayName; p.child = r.child; p.recipe = r;
             var body = B.Empty(root.transform, "Body", Vector3.zero).transform;
             p.body = body;
-            B.Box(body, "LegL", new Vector3(-0.09f, 0.33f, 0), new Vector3(0.15f, 0.66f, 0.2f), legsMat);
-            B.Box(body, "LegR", new Vector3(0.09f, 0.33f, 0), new Vector3(0.15f, 0.66f, 0.2f), legsMat);
-            B.Cap(body, "Torso", new Vector3(0, 1.03f, 0), new Vector3(0.42f, 0.4f, 0.28f), clothes);
-            B.Box(body, "ArmL", new Vector3(-0.25f, 1.05f, 0.02f), new Vector3(0.1f, 0.58f, 0.12f), clothes, false, new Vector3(0, 0, 4));
-            B.Box(body, "ArmR", new Vector3(0.25f, 1.05f, 0.02f), new Vector3(0.1f, 0.58f, 0.12f), clothes, false, new Vector3(0, 0, -4));
-            B.Box(body, "HandL", new Vector3(-0.27f, 0.74f, 0.03f), new Vector3(0.08f, 0.1f, 0.09f), skin);
-            B.Box(body, "HandR", new Vector3(0.27f, 0.74f, 0.03f), new Vector3(0.08f, 0.1f, 0.09f), skin);
-            B.Cyl(body, "Neck", new Vector3(0, 1.43f, 0), new Vector3(0.1f, 0.06f, 0.1f), skin);
-            var head = B.Empty(body, "Head", new Vector3(0, 1.58f, 0)).transform;
-            p.head = head;
-            B.Sph(head, "Face", Vector3.zero, new Vector3(0.22f, 0.26f, 0.23f), skin);
-            B.Sph(head, "Hair", new Vector3(0, 0.05f, -0.025f), new Vector3(0.235f, 0.22f, 0.235f), hair);
-            B.Sph(head, "EyeL", new Vector3(-0.045f, 0.01f, 0.105f), new Vector3(0.03f, 0.02f, 0.02f), "Black");
-            B.Sph(head, "EyeR", new Vector3(0.045f, 0.01f, 0.105f), new Vector3(0.03f, 0.02f, 0.02f), "Black");
+
+            var prefab = string.IsNullOrEmpty(r.model) ? null : GameAssets.Model(r.model);
+            if (prefab && GameAssets.Animator)
+            {
+                // Quaternius characters face -Z after import; turn them to face +Z like everything else.
+                var pivot = B.Empty(body, "ModelPivot", Vector3.zero, new Vector3(0, ModelYaw, 0)).transform;
+                var m = Object.Instantiate(prefab, pivot, false);
+                m.name = r.model;
+                var anim = m.GetComponent<Animator>();
+                if (!anim) anim = m.AddComponent<Animator>();
+                anim.runtimeAnimatorController = GameAssets.Animator;
+                anim.applyRootMotion = false;
+                anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                p.anim = anim;
+                p.head = anim.isHuman ? anim.GetBoneTransform(HumanBodyBones.Head) : null;
+                p.sitOffset = ModelSitOffset;
+                foreach (var rend in m.GetComponentsInChildren<Renderer>())
+                {
+                    rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    if (r.recolor == null) continue;
+                    var mats = rend.sharedMaterials;
+                    for (int i = 0; i < mats.Length; i++)
+                    {
+                        string key = mats[i] ? mats[i].name.Replace(" (Instance)", "") : "";
+                        if (r.recolor.TryGetValue(key, out var to) || r.recolor.TryGetValue("*", out to)) mats[i] = Mats.Get(to);
+                    }
+                    rend.sharedMaterials = mats;
+                }
+            }
+            else
+            {
+                B.Box(body, "LegL", new Vector3(-0.09f, 0.33f, 0), new Vector3(0.15f, 0.66f, 0.2f), r.legs);
+                B.Box(body, "LegR", new Vector3(0.09f, 0.33f, 0), new Vector3(0.15f, 0.66f, 0.2f), r.legs);
+                B.Cap(body, "Torso", new Vector3(0, 1.03f, 0), new Vector3(0.42f, 0.4f, 0.28f), r.clothes);
+                B.Box(body, "ArmL", new Vector3(-0.25f, 1.05f, 0.02f), new Vector3(0.1f, 0.58f, 0.12f), r.clothes, false, new Vector3(0, 0, 4));
+                B.Box(body, "ArmR", new Vector3(0.25f, 1.05f, 0.02f), new Vector3(0.1f, 0.58f, 0.12f), r.clothes, false, new Vector3(0, 0, -4));
+                B.Box(body, "HandL", new Vector3(-0.27f, 0.74f, 0.03f), new Vector3(0.08f, 0.1f, 0.09f), r.skin);
+                B.Box(body, "HandR", new Vector3(0.27f, 0.74f, 0.03f), new Vector3(0.08f, 0.1f, 0.09f), r.skin);
+                B.Cyl(body, "Neck", new Vector3(0, 1.43f, 0), new Vector3(0.1f, 0.06f, 0.1f), r.skin);
+                var head = B.Empty(body, "Head", new Vector3(0, 1.58f, 0)).transform;
+                p.head = head;
+                B.Sph(head, "Face", Vector3.zero, new Vector3(0.22f, 0.26f, 0.23f), r.skin);
+                B.Sph(head, "Hair", new Vector3(0, 0.05f, -0.025f), new Vector3(0.235f, 0.22f, 0.235f), r.hair);
+                B.Sph(head, "EyeL", new Vector3(-0.045f, 0.01f, 0.105f), new Vector3(0.03f, 0.02f, 0.02f), "Black");
+                B.Sph(head, "EyeR", new Vector3(0.045f, 0.01f, 0.105f), new Vector3(0.03f, 0.02f, 0.02f), "Black");
+            }
             var col = root.AddComponent<CapsuleCollider>();
             col.isTrigger = true;
             col.center = new Vector3(0, 0.95f, 0);
@@ -167,6 +255,34 @@ namespace TLP
             p.interact = root.AddComponent<Interactable>();
             p.interact.prompt = "";
             return p;
+        }
+
+        public static float ModelYaw = 180f;
+
+        /// <summary>Attach a prop to a bone, keeping its world size. People without a skeleton keep it on the body.</summary>
+        public static GameObject Attach(Passenger p, HumanBodyBones bone, GameObject prop, Vector3 worldOffset)
+        {
+            Transform t = p.anim && p.anim.isHuman ? p.anim.GetBoneTransform(bone) : null;
+            if (!t) return prop;
+            // Animated bones carry import scale, so props follow the bone instead of being parented to it.
+            var f = prop.AddComponent<BoneFollow>();
+            f.bone = t;
+            var worldPos = t.position + p.transform.rotation * worldOffset;
+            f.offset = Quaternion.Inverse(t.rotation) * (worldPos - t.position);
+            f.rot = Quaternion.Inverse(t.rotation) * prop.transform.rotation;
+            return prop;
+        }
+    }
+
+    public class BoneFollow : MonoBehaviour
+    {
+        public Transform bone;
+        public Vector3 offset;
+        public Quaternion rot = Quaternion.identity;
+        void LateUpdate()
+        {
+            if (!bone) return;
+            transform.SetPositionAndRotation(bone.position + bone.rotation * offset, bone.rotation * rot);
         }
     }
 
@@ -453,7 +569,15 @@ namespace TLP
             MakeInteract(bus, bellR, "BellRear", "Ring the bell");
 
             var handle = B.Box(t, "RearHandle", new Vector3(-1.17f, 1.1f, -2.2f), new Vector3(0.04f, 0.45f, 0.04f), "Rail");
+            // The handle is thin, so the clickable area covers the whole rear door (about 1 m wide, 1.9 m tall).
+            var handleCol = handle.AddComponent<BoxCollider>();
+            handleCol.size = new Vector3(0.25f / 0.04f, 1.9f / 0.45f, 1.1f / 0.04f);
+            handleCol.center = new Vector3(0, -0.1f / 0.45f, -0.4f / 0.04f);
             MakeInteract(bus, handle, "RearDoor", "Inspect the rear door");
+            // The handle is thin: let the whole doorway (from inside the bus) count as the target.
+            var hc = handle.GetComponent<BoxCollider>();
+            hc.size = new Vector3(0.3f / 0.04f, 1.9f / 0.45f, 1.0f / 0.04f);
+            hc.center = new Vector3(0.12f / 0.04f, -0.1f / 0.45f, -0.4f / 0.04f);
             var wet = B.Box(t, "RearHandleWet", new Vector3(-1.165f, 1.1f, -2.2f), new Vector3(0.05f, 0.25f, 0.05f), "Wet");
             bus.objs["RearWet"] = wet; wet.SetActive(false);
 

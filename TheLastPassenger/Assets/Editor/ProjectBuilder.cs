@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using UnityEditor.Animations;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
@@ -20,6 +22,7 @@ namespace TLP.EditorTools
         [MenuItem("The Last Passenger/1. Setup Scene and Materials")]
         public static void Setup()
         {
+            AssetSetup.ConfigureImports();
             var mats = CreateMaterials();
             CreateScene(mats);
             ConfigurePlayer();
@@ -156,8 +159,80 @@ namespace TLP.EditorTools
             if (rain.HasProperty("_TintColor")) rain.SetColor("_TintColor", C(0.5f, 0.55f, 0.6f, 0.35f));
             rain.color = C(0.7f, 0.75f, 0.8f, 0.35f);
             Save(L, rain);
+            ApplyTextures(L);
             AssetDatabase.SaveAssets();
             return L;
+        }
+
+        // ------------------------------------------------------------------ textures (ambientCG, CC0)
+
+        static void Tex(List<Material> L, string mat, string tex, float metresPerTile, float bump = 1f, Color? tint = null)
+        {
+            var m = L.FirstOrDefault(x => x.name == mat);
+            var c = AssetDatabase.LoadAssetAtPath<Texture2D>(AssetSetup.TexDir + "/" + tex + "_Color.jpg");
+            var n = AssetDatabase.LoadAssetAtPath<Texture2D>(AssetSetup.TexDir + "/" + tex + "_Normal.jpg");
+            if (!m || !c) { Debug.LogWarning("[TLP] texture missing for " + mat + " / " + tex); return; }
+            m.mainTexture = c;
+            if (tint.HasValue) m.color = tint.Value;
+            m.mainTextureScale = Vector2.one / metresPerTile;
+            if (n)
+            {
+                m.SetTexture("_BumpMap", n);
+                m.SetFloat("_BumpScale", bump);
+                m.EnableKeyword("_NORMALMAP");
+            }
+            EditorUtility.SetDirty(m);
+        }
+
+        static void ApplyTextures(List<Material> L)
+        {
+            Tex(L, "Road", "Asphalt025B", 3f, 1.2f, C(0.42f, 0.42f, 0.45f));
+            Tex(L, "Concrete", "Concrete034", 2.5f, 1f, C(0.5f, 0.49f, 0.46f));
+            Tex(L, "Kerb", "Concrete034", 1.5f, 1f, C(0.6f, 0.58f, 0.55f));
+            Tex(L, "KerbStripe", "Concrete034", 1.5f, 1f, C(0.75f, 0.66f, 0.2f));
+            foreach (var b in new[] { "Building1", "Building2", "Building3", "Building4", "HospitalWall" }) Tex(L, b, "Plaster001", 3f);
+            Tex(L, "Shutter", "CorrugatedSteel009", 1.2f, 1f, C(0.7f, 0.7f, 0.72f));
+            Tex(L, "BusCream", "PaintedMetal004", 1.2f, 0.6f, C(0.95f, 0.88f, 0.7f));
+            Tex(L, "BusMaroon", "PaintedMetal004", 1.2f, 0.6f, C(0.55f, 0.1f, 0.12f));
+            Tex(L, "Interior", "Plaster001", 1.2f, 0.4f, C(0.55f, 0.66f, 0.58f));
+            Tex(L, "Dash", "PaintedMetal004", 0.8f, 0.5f, C(0.16f, 0.16f, 0.17f));
+            Tex(L, "Barrier", "PaintedMetal004", 1.0f, 0.6f);
+            Tex(L, "Ceiling", "Plaster001", 1.5f, 0.5f, C(0.7f, 0.74f, 0.68f));
+            Tex(L, "Seat", "Leather033C", 0.6f, 1f, C(0.55f, 0.1f, 0.11f));
+            Tex(L, "Floor", "Rubber001", 0.8f, 1f, C(0.75f, 0.72f, 0.68f));
+            Tex(L, "Wood", "Fabric085", 0.3f, 1f, C(0.5f, 0.33f, 0.18f));
+            Tex(L, "Towel", "Fabric085", 0.25f);
+        }
+
+        // ------------------------------------------------------------------ animation
+
+        static RuntimeAnimatorController CreateAnimator()
+        {
+            const string path = "Assets/Animation/Passenger.controller";
+            Directory.CreateDirectory("Assets/Animation");
+            var existing = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
+            if (existing && existing.layers.Length > 0 && existing.layers[0].stateMachine.states.Length >= 6) return existing; // keep its GUID stable
+            AssetDatabase.DeleteAsset(path);
+            var ctrl = AnimatorController.CreateAnimatorControllerAtPath(path);
+            ctrl.AddParameter("Pose", AnimatorControllerParameterType.Int);
+            var sm = ctrl.layers[0].stateMachine;
+            var clips = AssetSetup.Clips();
+            string[] names = { "Idle_Loop", "Walk_Loop", "Sitting_Idle_Loop", "Sitting_Talking_Loop", "Idle_Talking_Loop", "Driving_Loop" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                var clip = clips.FirstOrDefault(c => c.name.EndsWith("|" + names[i]) || c.name == names[i]);
+                if (!clip) { Debug.LogWarning("[TLP] missing clip " + names[i]); continue; }
+                var st = sm.AddState(names[i]);
+                st.motion = clip;
+                if (i == 0) sm.defaultState = st;
+                var tr = sm.AddAnyStateTransition(st);
+                tr.AddCondition(AnimatorConditionMode.Equals, i, "Pose");
+                tr.duration = i == 1 ? 0.15f : 0.3f;
+                tr.hasExitTime = false;
+                tr.canTransitionToSelf = false;
+            }
+            AssetDatabase.SaveAssets();
+            return ctrl;
         }
 
         // ------------------------------------------------------------------ scene
@@ -179,6 +254,11 @@ namespace TLP.EditorTools
             var game = new GameObject("Game");
             var m = game.AddComponent<Mats>();
             m.list = mats.ToArray();
+            var ga = game.AddComponent<GameAssets>();
+            ga.models = Directory.GetFiles(AssetSetup.CharDir, "*.fbx").Concat(Directory.GetFiles(AssetSetup.KenneyDir, "*.fbx"))
+                .Select(p => AssetDatabase.LoadAssetAtPath<GameObject>(p.Replace('\\', '/'))).Where(g => g).ToArray();
+            ga.animator = CreateAnimator();
+            ga.tamil = AssetDatabase.LoadAssetAtPath<Font>(AssetSetup.Root + "/Fonts/NotoSansTamil-Bold.ttf");
             game.AddComponent<GameBoot>();
             EditorSceneManager.SaveScene(scene, ScenePath);
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
@@ -207,12 +287,15 @@ namespace TLP.EditorTools
         static void Build(BuildTarget target, string path, BuildOptions opts)
         {
             Setup();
+            // Building over an existing player produced a corrupt level0, so always start from an empty folder.
+            var outDir = target == BuildTarget.WebGL ? path : Path.GetDirectoryName(path);
+            if (Directory.Exists(outDir)) FileUtil.DeleteFileOrDirectory(outDir);
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath },
                 locationPathName = path,
                 target = target,
-                options = opts,
+                options = opts | BuildOptions.CleanBuildCache, // incremental builds produced a corrupt level0
             });
             var s = report.summary;
             Debug.Log("[TLP] Build " + target + " -> " + path + " : " + s.result + ", " + (s.totalSize / (1024 * 1024)) + " MB, " + s.totalErrors + " errors, " + s.totalTime);

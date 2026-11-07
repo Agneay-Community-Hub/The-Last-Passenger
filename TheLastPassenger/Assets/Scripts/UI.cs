@@ -14,6 +14,7 @@ namespace TLP
     public class UIManager : MonoBehaviour
     {
         public static UIManager I;
+        public static System.Action<string, float> OnLine;
 
         // modal state
         public bool menuOpen = true, paused, settingsOpen, howToOpen, manifestOpen, ticketOpen, docOpen, cinematic, creditsOpen;
@@ -167,7 +168,7 @@ namespace TLP
             objectiveFlash = Mathf.Max(0, objectiveFlash - dt);
 
             // subtitles
-            if (current == null && lines.Count > 0) { current = lines.Dequeue(); lineT = 0; }
+            if (current == null && lines.Count > 0) { current = lines.Dequeue(); lineT = 0; OnLine?.Invoke(current.speaker, current.dur); }
             if (current != null)
             {
                 if (!paused && !menuOpen) lineT += Time.deltaTime;

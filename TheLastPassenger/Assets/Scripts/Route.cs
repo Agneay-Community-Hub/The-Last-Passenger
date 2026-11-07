@@ -133,6 +133,8 @@ namespace TLP
             var g = B.Empty(world, "Kerb", new Vector3(0, 0, z));
             spawned.Add(g.transform);
             bool river = zone == Zone.River;
+            // The asphalt itself scrolls with the world so its texture shows the bus moving.
+            B.Box(g.transform, "Asphalt", new Vector3(2.8f, -0.55f, 10), new Vector3(10.0f, 0.1f, 20.02f), "Road");
             B.Box(g.transform, "KerbL", new Vector3(-2.15f, -0.42f, 10), new Vector3(0.3f, 0.18f, 20f), "Kerb");
             B.Box(g.transform, "PavL", new Vector3(-4.8f, -0.35f, 10), new Vector3(5.2f, 0.3f, 20f), "Concrete");
             B.Box(g.transform, "KerbR", new Vector3(7.7f, -0.42f, 10), new Vector3(0.3f, 0.18f, 20f), "Kerb");
@@ -140,9 +142,17 @@ namespace TLP
             if (zone == Zone.Flyover)
             {
                 // Striped construction barriers and pillars of the unfinished flyover on the right.
-                for (int i = 0; i < 4; i++)
-                    B.Box(g.transform, "Barrier", new Vector3(7.2f, -0.1f, i * 5f + 2.5f), new Vector3(0.3f, 0.8f, 4.6f), i % 2 == 0 ? "Barrier" : "BarrierRed");
-                B.Box(g.transform, "Pillar", new Vector3(12f, 3.2f, 10f), new Vector3(1.6f, 7.4f, 1.6f), "Concrete");
+                // Kenney construction barriers, cones and a work light; a bridge pillar under the deck.
+                for (int i = 0; i < 8; i++)
+                    B.Model(g.transform, "construction_barrier", new Vector3(7.1f, -0.5f, i * 2.5f + 1.25f), 10f);
+                for (int i = 0; i < 3; i++)
+                    B.Model(g.transform, "construction_pylon", new Vector3(R(5.2f, 6.4f), -0.5f, R(0, 20)), 8f, R(0, 360));
+                if (R(0, 1) < 0.35f)
+                {
+                    B.Model(g.transform, "construction_light", new Vector3(6.6f, -0.5f, 10f), 8f, 90);
+                    B.PointLight(g.transform, "WorkLight", new Vector3(6.4f, 1.4f, 10f), new Color(1f, 0.55f, 0.15f), 1.2f, 6f).gameObject.AddComponent<Blinker>();
+                }
+                B.Model(g.transform, "bridge_pillar", new Vector3(12f, -0.5f, 10f), 15f);
                 bool broken = R(0, 1) < 0.3f;
                 if (!broken) B.Box(g.transform, "Deck", new Vector3(10f, 7.3f, 10f), new Vector3(7f, 0.8f, 20.5f), "Concrete");
                 else
@@ -348,7 +358,7 @@ namespace TLP
             B.Box(g.transform, "Edge", new Vector3(-1.45f, 0.17f, 0), new Vector3(0.12f, 0.36f, 30f), "KerbStripe");
             B.Box(g.transform, "Canopy", new Vector3(-5f, 4.8f, 0), new Vector3(10f, 0.25f, 30f), "Concrete");
             for (int i = -3; i <= 3; i++)
-                B.Box(g.transform, "Column", new Vector3(-2.2f, 2.4f, i * 4.5f), new Vector3(0.45f, 4.8f, 0.45f), "Concrete");
+                B.Box(g.transform, "Column", new Vector3(-2.2f, 2.4f, i * 4.5f + 2.25f), new Vector3(0.45f, 4.8f, 0.45f), "Concrete");
             B.Box(g.transform, "SignBack", new Vector3(-1.9f, 5.6f, 0), new Vector3(0.1f, 1.0f, 14f), "Black");
             B.Text(g.transform, "Sign", "KAVERIPURAM  CENTRAL  BUS  STAND", new Vector3(-1.82f, 5.6f, 0), new Vector3(0, 90, 0), 0.42f, new Color(1f, 0.5f, 0.1f));
             B.Box(g.transform, "Bay", new Vector3(-8f, 1.0f, 2f), new Vector3(1.5f, 2f, 1.5f), "Building2");
@@ -364,11 +374,19 @@ namespace TLP
             var g = BuildShelter(parent, z, "", false);
             var deck = B.Empty(parent, "FlyoverEnd", new Vector3(0, -0.5f, z + 12f));
             B.Box(deck.transform, "Deck", new Vector3(4f, 7.3f, 0), new Vector3(16f, 0.8f, 10f), "Concrete", false, new Vector3(-5, 0, 0));
-            B.Box(deck.transform, "Barrier", new Vector3(7.2f, 0.3f, 0), new Vector3(0.3f, 1f, 10f), "Barrier");
+            for (int i = 0; i < 4; i++) B.Model(deck.transform, "construction_barrier", new Vector3(7.1f, 0f, -3.75f + i * 2.5f), 10f);
+            B.Model(deck.transform, "construction_light", new Vector3(6.4f, 0f, 2f), 8f, 90);
             B.Text(deck.transform, "Warn", "ROAD CLOSED", new Vector3(7.0f, 0.4f, 0), new Vector3(0, 90, 0), 0.4f, new Color(0.1f, 0.1f, 0.1f));
             Spawned(deck);
             return g;
         }
+    }
+
+    public class Blinker : MonoBehaviour
+    {
+        Light l; float baseI;
+        void Start() { l = GetComponent<Light>(); baseI = l.intensity; }
+        void Update() { l.intensity = (Time.time * 1.2f + transform.position.z * 0.1f) % 1f < 0.5f ? baseI : 0f; }
     }
 
     public class SignFlicker : MonoBehaviour
